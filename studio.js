@@ -252,6 +252,7 @@ document.getElementById('btn-camera').addEventListener('click', async () => {
         }
         camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         camVideo.srcObject = camStream;
+        camVideo.play().catch(e => console.error('Play error:', e));
         document.getElementById('btn-camera').innerHTML = 'Disattiva Camera';
         document.getElementById('btn-camera').classList.remove('secondary');
         document.getElementById('btn-camera').classList.add('primary');
@@ -273,6 +274,7 @@ document.getElementById('btn-screen').addEventListener('click', async () => {
         }
         screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         screenVideo.srcObject = screenStream;
+        screenVideo.play().catch(e => console.error('Play error:', e));
         document.getElementById('btn-screen').innerHTML = 'Interrompi Schermo';
         document.getElementById('btn-screen').classList.remove('secondary');
         document.getElementById('btn-screen').classList.add('primary');

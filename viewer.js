@@ -241,3 +241,26 @@ btnReconnect.addEventListener('click', () => {
 
 // Auto-connect on load
 connectToStudio();
+
+const btnFullscreen = document.getElementById('btn-fullscreen');
+const videoContainer = document.querySelector('.video-container');
+
+btnFullscreen.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+        if (videoContainer.requestFullscreen) {
+            videoContainer.requestFullscreen();
+        } else if (videoContainer.webkitRequestFullscreen) {
+            videoContainer.webkitRequestFullscreen();
+        } else if (videoContainer.msRequestFullscreen) {
+            videoContainer.msRequestFullscreen();
+        }
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+        }
+    }
+});

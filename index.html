@@ -21,6 +21,9 @@
     <main style="justify-content: center; gap: 20px;">
         <div class="viewer-container" style="flex: 3;">
             <div class="video-container glass" style="position:relative;">
+                <button id="btn-fullscreen" style="position:absolute; top:10px; right:10px; z-index:20; background:rgba(0,0,0,0.5); border:none; color:white; padding:8px; border-radius:4px; cursor:pointer;" title="Pieno Schermo">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                </button>
                 <video id="viewer-video" autoplay playsinline></video>
                 <div id="offline-overlay" class="offline-message">
                     <h2 id="offline-title">Stream Offline</h2>
