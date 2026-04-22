@@ -76,18 +76,31 @@
                 </div>
 
                 <div class="source-item">
-                    <label>🎬 Pubblicità / Media</label>
+                    <label>🎬 Media & Sigle Programmi</label>
                     <input type="file" id="media-upload" accept="video/*,image/*" style="font-size:0.8rem; width:100%; margin-top:5px;" />
                     <video id="media-preview" controls style="width:100%; border-radius:6px; display:none; margin-top:5px;"></video>
-                    <button id="layout-media" class="mixer-btn" style="margin-top:5px; display:none; width: 100%;">Manda in Onda Media</button>
+                    <button id="layout-media" class="mixer-btn" style="margin-top:5px; display:none; width: 100%;">Manda in Onda Media/Sigla</button>
                 </div>
 
                 <div class="source-item">
-                    <label>🤖 AI News Anchor (Locale)</label>
-                    <input type="text" id="news-topic" placeholder="Cerca (es. Intelligenza Artificiale)" style="padding:5px; width:100%; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px; margin-bottom:5px;">
-                    <button id="btn-generate-news" class="secondary" style="width:100%; justify-content:center; font-size:0.85rem; padding: 8px;">Cerca sul Web e Genera</button>
-                    <p id="ai-status" style="font-size:0.75rem; color:var(--text-muted); margin-top:5px; text-align:center;"></p>
-                    <textarea id="news-teleprompter" style="width:100%; height:80px; margin-top:5px; background:rgba(0,0,0,0.5); color:#a78bfa; border:1px solid rgba(255,255,255,0.2); border-radius:4px; resize:none; padding: 8px;" placeholder="Il testo del notiziario generato apparirà qui..."></textarea>
+                    <label>📅 Palinsesto (Programmazione)</label>
+                    <div style="display:flex; gap:5px; margin-bottom:5px;">
+                        <input type="time" id="prog-time" style="padding:5px; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px;">
+                        <input type="text" id="prog-name" placeholder="Nome Programma" style="flex:1; padding:5px; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px;">
+                        <button id="btn-add-prog" class="secondary" style="padding:5px 10px;">+</button>
+                    </div>
+                    <ul id="schedule-list" style="list-style:none; max-height:120px; overflow-y:auto; font-size:0.85rem; border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:5px; background:rgba(0,0,0,0.2);">
+                        <!-- Schedule items go here -->
+                    </ul>
+                    <button id="btn-sync-schedule" class="secondary" style="width:100%; justify-content:center; font-size:0.8rem; margin-top:5px; padding:6px;">Sincronizza agli Spettatori</button>
+                </div>
+
+                <div class="source-item">
+                    <label>📊 Statistiche Settimanali (Picco Spettatori)</label>
+                    <div id="stats-chart" style="display:flex; align-items:flex-end; gap:5px; height:80px; margin-top:10px; padding:5px; border-bottom:1px solid rgba(255,255,255,0.2); border-left:1px solid rgba(255,255,255,0.2);">
+                        <!-- Bars go here -->
+                    </div>
+                    <div id="stats-labels" style="display:flex; justify-content:space-between; font-size:0.6rem; color:var(--text-muted); margin-top:2px;"></div>
                 </div>
             </div>
 

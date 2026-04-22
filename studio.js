@@ -1,7 +1,3 @@
-import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
-
-env.allowLocalModels = false;
-
 const canvas = document.getElementById('studio-canvas');
 const ctx = canvas.getContext('2d');
 const camVideo = document.getElementById('cam-video');
@@ -42,69 +38,106 @@ document.getElementById('media-upload').addEventListener('change', (e) => {
     }
 });
 
-let aiPipeline = null;
+// Palinsesto (Schedule) Logic
+let schedule = JSON.parse(localStorage.getItem('tv_schedule')) || [];
 
-// AI News Anchor Logic
-document.getElementById('btn-generate-news').addEventListener('click', async () => {
-    const btn = document.getElementById('btn-generate-news');
-    const teleprompter = document.getElementById('news-teleprompter');
-    const status = document.getElementById('ai-status');
-    const topic = document.getElementById('news-topic').value || 'Tecnologia';
-    
-    btn.disabled = true;
-    
-    try {
-        status.innerText = "🔍 Ricerca sul web in corso (Wikipedia)...";
-        // 1. Web Search
-        const wikiUrl = `https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(topic)}&utf8=&format=json&origin=*`;
-        const wikiRes = await fetch(wikiUrl);
-        const wikiData = await wikiRes.json();
-        let searchContext = "Nessuna informazione trovata.";
-        let sourceCitation = "";
-        
-        if (wikiData.query.search.length > 0) {
-            const firstResult = wikiData.query.search[0];
-            searchContext = firstResult.snippet.replace(/<\/?[^>]+(>|$)/g, ""); // Strip HTML
-            sourceCitation = `Fonte: Wikipedia - "${firstResult.title}"`;
-        }
+function renderSchedule() {
+    const list = document.getElementById('schedule-list');
+    list.innerHTML = '';
+    // Sort by time
+    schedule.sort((a, b) => a.time.localeCompare(b.time));
+    schedule.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.style.display = 'flex';
+        li.style.justifyContent = 'space-between';
+        li.style.padding = '4px 0';
+        li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+        li.innerHTML = `<span><strong>${item.time}</strong> - ${item.name}</span> <button class="danger" style="padding:2px 6px; font-size:0.6rem;" onclick="removeSchedule(${index})">X</button>`;
+        list.appendChild(li);
+    });
+}
 
-        status.innerText = "🤖 Caricamento AI Locale (richiede qualche istante al primo avvio)...";
-        
-        // 2. Load Local AI (Transformers.js)
-        if (!aiPipeline) {
-            aiPipeline = await pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-78M', {
-                progress_callback: x => {
-                    if(x.status === 'downloading') {
-                        status.innerText = `📥 Download AI: ${Math.round(x.progress || 0)}%`;
-                    }
-                }
-            });
-        }
-        
-        status.innerText = "🧠 Elaborazione del notiziario...";
-        
-        // 3. Generate text
-        const prompt = `Traduci e riassumi in italiano questa notizia in tono giornalistico: ${searchContext}`;
-        
-        const out = await aiPipeline(prompt, {
-            max_new_tokens: 60,
-            temperature: 0.7
-        });
-        
-        let text = out[0].generated_text || searchContext;
-        let finalOutput = `📰 NOTIZIA FLASH: ${topic.toUpperCase()}\n\n${text.trim()}`;
-        if (sourceCitation) finalOutput += `\n\n🔗 ${sourceCitation}`;
-        
-        teleprompter.value = finalOutput;
-        status.innerText = "✅ Pronto!";
-        
-    } catch (err) {
-        console.error(err);
-        status.innerText = "❌ Errore durante la generazione.";
-    } finally {
-        btn.disabled = false;
+window.removeSchedule = function(index) {
+    schedule.splice(index, 1);
+    localStorage.setItem('tv_schedule', JSON.stringify(schedule));
+    renderSchedule();
+};
+
+document.getElementById('btn-add-prog').addEventListener('click', () => {
+    const t = document.getElementById('prog-time').value;
+    const n = document.getElementById('prog-name').value;
+    if (t && n) {
+        schedule.push({ time: t, name: n });
+        localStorage.setItem('tv_schedule', JSON.stringify(schedule));
+        renderSchedule();
+        document.getElementById('prog-time').value = '';
+        document.getElementById('prog-name').value = '';
     }
 });
+
+function syncScheduleToViewers() {
+    viewers.forEach(conn => {
+        if (conn.open) {
+            conn.send({ type: 'schedule', data: schedule });
+        }
+    });
+}
+
+document.getElementById('btn-sync-schedule').addEventListener('click', () => {
+    syncScheduleToViewers();
+    alert('Palinsesto sincronizzato agli spettatori!');
+});
+
+renderSchedule();
+
+// Stats Logic (Storico Settimanale)
+let dailyStats = JSON.parse(localStorage.getItem('tv_stats')) || {};
+let currentPeak = 0;
+
+function updatePeakStats(count) {
+    if (count > currentPeak) {
+        currentPeak = count;
+        const today = new Date().toISOString().split('T')[0];
+        dailyStats[today] = Math.max(dailyStats[today] || 0, currentPeak);
+        localStorage.setItem('tv_stats', JSON.stringify(dailyStats));
+        renderStats();
+    }
+}
+
+function renderStats() {
+    const chart = document.getElementById('stats-chart');
+    const labels = document.getElementById('stats-labels');
+    chart.innerHTML = '';
+    labels.innerHTML = '';
+    
+    // Get last 7 days
+    const dates = [];
+    for(let i=6; i>=0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        dates.push(d.toISOString().split('T')[0]);
+    }
+    
+    const maxVal = Math.max(...dates.map(d => dailyStats[d] || 0), 10); // at least 10 scale
+    
+    dates.forEach(d => {
+        const val = dailyStats[d] || 0;
+        const heightPct = (val / maxVal) * 100;
+        
+        const bar = document.createElement('div');
+        bar.style.flex = '1';
+        bar.style.backgroundColor = 'var(--primary-color)';
+        bar.style.height = `${heightPct}%`;
+        bar.style.borderRadius = '2px 2px 0 0';
+        bar.title = `${d}: ${val} spettatori`;
+        chart.appendChild(bar);
+        
+        const lbl = document.createElement('div');
+        lbl.innerText = d.split('-')[2]; // just day number
+        labels.appendChild(lbl);
+    });
+}
+renderStats();
 
 // WebRTC / PeerJS setup
 let peer = null;
@@ -172,6 +205,11 @@ function initPeer() {
         console.log('Viewer connected via data:', conn.peer);
         viewers.set(conn.peer, conn);
         updateViewerCount();
+        
+        // Send schedule immediately when they connect
+        conn.on('open', () => {
+            conn.send({ type: 'schedule', data: schedule });
+        });
 
         conn.on('close', () => {
             viewers.delete(conn.peer);
@@ -188,6 +226,7 @@ function initPeer() {
 function updateViewerCount() {
     const count = viewers.size;
     viewerCountEl.textContent = count;
+    updatePeakStats(count); // update stats chart
     viewers.forEach(conn => {
         if (conn.open) {
             conn.send({ type: 'viewers', count: count });
