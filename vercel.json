@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "kjh.Canale100.thetubes.net"
+        }
+      ],
+      "destination": "/studio.html"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "Canale100.thetubes.net"
+        }
+      ],
+      "destination": "/index.html"
+    }
+  ]
+}
