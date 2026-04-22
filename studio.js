@@ -1,3 +1,7 @@
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
+
+env.allowLocalModels = false;
+
 const canvas = document.getElementById('studio-canvas');
 const ctx = canvas.getContext('2d');
 const camVideo = document.getElementById('cam-video');
@@ -38,38 +42,60 @@ document.getElementById('media-upload').addEventListener('change', (e) => {
     }
 });
 
+let aiPipeline = null;
+
 // AI News Anchor Logic
 document.getElementById('btn-generate-news').addEventListener('click', async () => {
     const btn = document.getElementById('btn-generate-news');
     const teleprompter = document.getElementById('news-teleprompter');
-    const topic = document.getElementById('news-topic').value || 'Ultime Notizie';
-    const token = document.getElementById('hf-token').value;
+    const status = document.getElementById('ai-status');
+    const topic = document.getElementById('news-topic').value || 'Tecnologia';
     
-    btn.textContent = 'Generazione in corso...';
     btn.disabled = true;
     
     try {
-        const prompt = `<|system|>\nSei un conduttore del telegiornale. Scrivi un breve notiziario (massimo 3 frasi) in italiano sul tema: ${topic}.\n<|user|>\nScrivi le notizie ora.\n<|assistant|>\n`;
+        status.innerText = "🔍 Ricerca sul web in corso (Wikipedia)...";
+        // 1. Web Search
+        const wikiUrl = `https://it.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(topic)}&utf8=&format=json&origin=*`;
+        const wikiRes = await fetch(wikiUrl);
+        const wikiData = await wikiRes.json();
+        let searchContext = "Nessuna informazione trovata.";
         
-        const headers = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (wikiData.query.search.length > 0) {
+            searchContext = wikiData.query.search[0].snippet.replace(/<\/?[^>]+(>|$)/g, ""); // Strip HTML
+        }
+
+        status.innerText = "🤖 Caricamento AI Locale (richiede qualche istante al primo avvio)...";
         
-        const res = await fetch('https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({ inputs: prompt, parameters: { max_new_tokens: 150, temperature: 0.7 } })
+        // 2. Load Local AI (Transformers.js)
+        if (!aiPipeline) {
+            aiPipeline = await pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-78M', {
+                progress_callback: x => {
+                    if(x.status === 'downloading') {
+                        status.innerText = `📥 Download AI: ${Math.round(x.progress || 0)}%`;
+                    }
+                }
+            });
+        }
+        
+        status.innerText = "🧠 Elaborazione del notiziario...";
+        
+        // 3. Generate text
+        const prompt = `Traduci e riassumi in italiano questa notizia in tono giornalistico: ${searchContext}`;
+        
+        const out = await aiPipeline(prompt, {
+            max_new_tokens: 60,
+            temperature: 0.7
         });
         
-        if (!res.ok) throw new Error('API Error');
-        const data = await res.json();
+        let text = out[0].generated_text || searchContext;
+        teleprompter.value = `📰 NOTIZIA FLASH: ${topic.toUpperCase()}\n\n${text.trim()}`;
+        status.innerText = "✅ Pronto!";
         
-        let text = data[0].generated_text.split('<|assistant|>\n')[1] || data[0].generated_text;
-        teleprompter.value = text.trim();
     } catch (err) {
         console.error(err);
-        teleprompter.value = "Errore durante la generazione. Controlla il token o prova un altro argomento.";
+        status.innerText = "❌ Errore durante la generazione.";
     } finally {
-        btn.textContent = 'Genera Notiziario AI';
         btn.disabled = false;
     }
 });
