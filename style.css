@@ -189,3 +189,7 @@ button.secondary:hover { background-color: rgba(255, 255, 255, 0.15); transform:
 .login-box h2 { margin-bottom: 15px; }
 .login-box p { margin-bottom: 25px; color: var(--text-muted); }
 .error-msg { color: var(--danger-color); margin-top: 15px; font-weight: bold; }
+.mixer-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; }
+.mixer-btn { padding: 10px; font-size: 0.85rem; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 6px; color: white; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.mixer-btn:hover { background: rgba(255,255,255,0.1); }
+.mixer-btn.active { background: var(--primary-color); border-color: var(--primary-hover); }

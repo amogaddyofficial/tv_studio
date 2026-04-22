@@ -2,13 +2,77 @@ const canvas = document.getElementById('studio-canvas');
 const ctx = canvas.getContext('2d');
 const camVideo = document.getElementById('cam-video');
 const screenVideo = document.getElementById('screen-video');
-const layoutSelect = document.getElementById('layout-select');
+const mediaPreview = document.getElementById('media-preview');
 const viewerCountEl = document.getElementById('viewer-count');
 
 let camStream = null;
 let screenStream = null;
 let mixedStream = null;
 let isBroadcasting = false;
+let currentLayout = 'camera-only';
+
+document.querySelectorAll('.mixer-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.mixer-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        if(e.target.id === 'layout-cam') currentLayout = 'camera-only';
+        if(e.target.id === 'layout-screen') currentLayout = 'screen-only';
+        if(e.target.id === 'layout-pip') currentLayout = 'pip';
+        if(e.target.id === 'layout-split') currentLayout = 'split';
+        if(e.target.id === 'layout-media') currentLayout = 'media';
+    });
+});
+
+// Media Player Logic
+document.getElementById('media-upload').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const url = URL.createObjectURL(file);
+        mediaPreview.src = url;
+        mediaPreview.style.display = 'block';
+        document.getElementById('layout-media').style.display = 'flex';
+        // Auto play preview muted
+        mediaPreview.muted = true;
+        mediaPreview.loop = true;
+        mediaPreview.play();
+    }
+});
+
+// AI News Anchor Logic
+document.getElementById('btn-generate-news').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-generate-news');
+    const teleprompter = document.getElementById('news-teleprompter');
+    const topic = document.getElementById('news-topic').value || 'Ultime Notizie';
+    const token = document.getElementById('hf-token').value;
+    
+    btn.textContent = 'Generazione in corso...';
+    btn.disabled = true;
+    
+    try {
+        const prompt = `<|system|>\nSei un conduttore del telegiornale. Scrivi un breve notiziario (massimo 3 frasi) in italiano sul tema: ${topic}.\n<|user|>\nScrivi le notizie ora.\n<|assistant|>\n`;
+        
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const res = await fetch('https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ inputs: prompt, parameters: { max_new_tokens: 150, temperature: 0.7 } })
+        });
+        
+        if (!res.ok) throw new Error('API Error');
+        const data = await res.json();
+        
+        let text = data[0].generated_text.split('<|assistant|>\n')[1] || data[0].generated_text;
+        teleprompter.value = text.trim();
+    } catch (err) {
+        console.error(err);
+        teleprompter.value = "Errore durante la generazione. Controlla il token o prova un altro argomento.";
+    } finally {
+        btn.textContent = 'Genera Notiziario AI';
+        btn.disabled = false;
+    }
+});
 
 // WebRTC / PeerJS setup
 let peer = null;
@@ -153,16 +217,16 @@ function drawMixer() {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    const layout = layoutSelect.value;
-    
-    if (layout === 'screen-only' && screenStream) {
+    if (currentLayout === 'screen-only' && screenStream) {
         ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
-    } else if (layout === 'camera-only' && camStream) {
+    } else if (currentLayout === 'media' && !mediaPreview.paused) {
+        ctx.drawImage(mediaPreview, 0, 0, canvas.width, canvas.height);
+    } else if (currentLayout === 'camera-only' && camStream) {
         const aspect = camVideo.videoWidth / camVideo.videoHeight;
         const h = canvas.height;
         const w = h * aspect;
         ctx.drawImage(camVideo, (canvas.width - w) / 2, 0, w, h);
-    } else if (layout === 'pip') {
+    } else if (currentLayout === 'pip') {
         if (screenStream) {
             ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
         }
@@ -174,7 +238,7 @@ function drawMixer() {
             ctx.lineWidth = 2;
             ctx.strokeRect(canvas.width - pipW - 20, canvas.height - pipH - 20, pipW, pipH);
         }
-    } else if (layout === 'split') {
+    } else if (currentLayout === 'split') {
         if (camStream && screenStream) {
             ctx.drawImage(camVideo, 0, canvas.height/4, canvas.width/2, canvas.height/2);
             ctx.drawImage(screenVideo, canvas.width/2, 0, canvas.width/2, canvas.height);
@@ -198,6 +262,13 @@ document.getElementById('btn-broadcast').addEventListener('click', () => {
         mixedStream.addTrack(camStream.getAudioTracks()[0]);
     } else if (screenStream && screenStream.getAudioTracks().length > 0) {
         mixedStream.addTrack(screenStream.getAudioTracks()[0]);
+    } else if (currentLayout === 'media' && mediaPreview.captureStream) {
+        // Fallback for media audio if supported
+        const mStream = mediaPreview.captureStream();
+        if(mStream.getAudioTracks().length > 0) {
+            mixedStream.addTrack(mStream.getAudioTracks()[0]);
+            mediaPreview.muted = false; // unmute so viewers can hear
+        }
     }
     
     isBroadcasting = true;

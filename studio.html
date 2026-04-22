@@ -66,13 +66,28 @@
                 </div>
 
                 <div class="source-item">
-                    <label>Layout</label>
-                    <select id="layout-select" style="padding: 8px; border-radius: 4px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2);">
-                        <option value="camera-only">Solo Camera</option>
-                        <option value="screen-only">Solo Schermo</option>
-                        <option value="pip">Picture-in-Picture</option>
-                        <option value="split">Split Screen</option>
-                    </select>
+                    <label>Mixer Regia</label>
+                    <div class="mixer-buttons">
+                        <button id="layout-cam" class="mixer-btn active">🎥 Camera</button>
+                        <button id="layout-screen" class="mixer-btn">🖥️ Schermo</button>
+                        <button id="layout-pip" class="mixer-btn">🖼️ PiP</button>
+                        <button id="layout-split" class="mixer-btn">🎛️ Split</button>
+                    </div>
+                </div>
+
+                <div class="source-item">
+                    <label>🎬 Pubblicità / Media</label>
+                    <input type="file" id="media-upload" accept="video/*,image/*" style="font-size:0.8rem; width:100%; margin-top:5px;" />
+                    <video id="media-preview" controls style="width:100%; border-radius:6px; display:none; margin-top:5px;"></video>
+                    <button id="layout-media" class="mixer-btn" style="margin-top:5px; display:none; width: 100%;">Manda in Onda Media</button>
+                </div>
+
+                <div class="source-item">
+                    <label>🤖 AI News Anchor</label>
+                    <input type="text" id="hf-token" placeholder="HuggingFace Token (Opzionale)" style="padding:5px; width:100%; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px; margin-bottom:5px;">
+                    <input type="text" id="news-topic" placeholder="Argomento (es. Tecnologia)" style="padding:5px; width:100%; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px; margin-bottom:5px;">
+                    <button id="btn-generate-news" class="secondary" style="width:100%; justify-content:center; font-size:0.85rem; padding: 8px;">Genera Notiziario AI</button>
+                    <textarea id="news-teleprompter" style="width:100%; height:80px; margin-top:5px; background:rgba(0,0,0,0.5); color:#a78bfa; border:1px solid rgba(255,255,255,0.2); border-radius:4px; resize:none; padding: 8px;" placeholder="Il testo del notiziario generato apparirà qui..."></textarea>
                 </div>
             </div>
 
