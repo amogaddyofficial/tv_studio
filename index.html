@@ -25,13 +25,16 @@
                 <div id="offline-overlay" class="offline-message">
                     <h2 id="offline-title">Stream Offline</h2>
                     <p id="offline-desc">La trasmissione non è ancora iniziata.</p>
-                    <div id="yt-container" style="display:none; width:100%; aspect-ratio:16/9; margin-top:15px;">
+                    <div id="yt-container" style="display:none; width:100%; aspect-ratio:16/9; margin-top:15px; pointer-events:none;">
                         <iframe id="yt-iframe" width="100%" height="100%" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-                        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:5px;">In onda ora tramite YouTube (Auto-TV)</p>
+                        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:5px;">In onda ora (Auto-TV)</p>
                     </div>
-                    <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; justify-content:center;">
+                    <div id="reconnect-box" style="margin-top: 20px; display: flex; gap: 10px; align-items: center; justify-content:center;">
                         <button id="btn-reconnect" class="primary">Riprova a Connetterti al Live</button>
                     </div>
+                </div>
+                <div id="tv-timeline" style="position:absolute; bottom:0; left:0; right:0; height:6px; background:rgba(0,0,0,0.5); display:none; z-index:10;">
+                    <div id="tv-progress" style="height:100%; background:var(--primary-color); width:0%; transition: width 1s linear;"></div>
                 </div>
             </div>
         </div>

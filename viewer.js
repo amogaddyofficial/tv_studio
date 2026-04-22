@@ -6,6 +6,9 @@ const ytContainer = document.getElementById('yt-container');
 const ytIframe = document.getElementById('yt-iframe');
 const offlineTitle = document.getElementById('offline-title');
 const offlineDesc = document.getElementById('offline-desc');
+const tvTimeline = document.getElementById('tv-timeline');
+const tvProgress = document.getElementById('tv-progress');
+const reconnectBox = document.getElementById('reconnect-box');
 
 let scheduleData = JSON.parse(sessionStorage.getItem('tv_schedule')) || [];
 let isLiveOffline = true;
@@ -68,24 +71,73 @@ function renderSchedule() {
     
     // Auto-TV logic
     if (isLiveOffline && activeItem && activeItem.url) {
+        
+        // Calculate diffSeconds for Fake Live
+        const activeStart = new Date();
+        const [ah, am] = activeItem.time.split(':').map(Number);
+        activeStart.setHours(ah, am, 0, 0);
+        let diffSeconds = Math.floor((now - activeStart) / 1000);
+        if (diffSeconds < 0) diffSeconds = 0;
+        
+        // Determine End Time (next program or +1 hour)
+        let totalSeconds = 3600; // default 1 hour
+        let activeIdx = scheduleData.indexOf(activeItem);
+        if (activeIdx < scheduleData.length - 1) {
+            const nextItem = scheduleData[activeIdx + 1];
+            const [nh, nm] = nextItem.time.split(':').map(Number);
+            const nextStart = new Date();
+            nextStart.setHours(nh, nm, 0, 0);
+            if (nextStart < activeStart) nextStart.setDate(nextStart.getDate() + 1);
+            totalSeconds = Math.floor((nextStart - activeStart) / 1000);
+        }
+        
+        // Update timeline bar
+        tvTimeline.style.display = 'block';
+        let progressPct = (diffSeconds / totalSeconds) * 100;
+        if (progressPct > 100) progressPct = 100;
+        tvProgress.style.width = `${progressPct}%`;
+
         const ytId = getYouTubeId(activeItem.url);
         if (ytId) {
-            if (ytIframe.src !== `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0`) {
-                ytIframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0`;
+            // Check if iframe needs update or is missing start time
+            if (!ytIframe.src.includes(ytId)) {
+                ytIframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&start=${diffSeconds}`;
             }
             ytContainer.style.display = 'block';
-            offlineTitle.innerText = activeItem.name;
-            offlineDesc.style.display = 'none';
+            viewerVideo.style.display = 'none';
+        } else {
+            // Assume MP4
+            ytContainer.style.display = 'none';
+            viewerVideo.style.display = 'block';
+            if (viewerVideo.src !== activeItem.url) {
+                viewerVideo.srcObject = null;
+                viewerVideo.src = activeItem.url;
+                viewerVideo.currentTime = diffSeconds;
+                viewerVideo.play().catch(e => console.log('Autoplay blocked', e));
+            }
         }
+        
+        offlineTitle.innerText = activeItem.name;
+        offlineDesc.style.display = 'none';
+        reconnectBox.style.display = 'flex';
+        
     } else if (isLiveOffline) {
+        tvTimeline.style.display = 'none';
         ytContainer.style.display = 'none';
+        viewerVideo.style.display = 'block';
+        viewerVideo.srcObject = null;
+        viewerVideo.src = "";
         ytIframe.src = "";
         offlineTitle.innerText = 'Stream Offline';
         offlineDesc.style.display = 'block';
+        reconnectBox.style.display = 'flex';
+    } else {
+        // Live stream active
+        tvTimeline.style.display = 'none';
     }
 }
 renderSchedule();
-setInterval(renderSchedule, 60000); // update highlighting every minute
+setInterval(renderSchedule, 10000); // Check every 10 seconds for timeline
 
 let peer = null;
 let dataConn = null;
@@ -143,8 +195,12 @@ function connectToStudio() {
         
         call.on('stream', (stream) => {
             if (stream) {
+                viewerVideo.style.display = 'block';
+                viewerVideo.src = "";
                 viewerVideo.srcObject = stream;
                 offlineOverlay.style.display = 'none';
+                ytContainer.style.display = 'none';
+                tvTimeline.style.display = 'none';
                 isLiveOffline = false;
                 renderSchedule(); // update layout since we are live
             }

@@ -67,13 +67,15 @@ document.getElementById('btn-add-prog').addEventListener('click', () => {
     const t = document.getElementById('prog-time').value;
     const n = document.getElementById('prog-name').value;
     const u = document.getElementById('prog-url').value;
-    if (t && n) {
+    if (t && n && u) {
         schedule.push({ time: t, name: n, url: u });
         localStorage.setItem('tv_schedule', JSON.stringify(schedule));
         renderSchedule();
         document.getElementById('prog-time').value = '';
         document.getElementById('prog-name').value = '';
         document.getElementById('prog-url').value = '';
+    } else {
+        alert("Inserisci Orario, Nome e Link Video (MP4 o YouTube)!");
     }
 });
 
