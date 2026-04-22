@@ -60,9 +60,12 @@ document.getElementById('btn-generate-news').addEventListener('click', async () 
         const wikiRes = await fetch(wikiUrl);
         const wikiData = await wikiRes.json();
         let searchContext = "Nessuna informazione trovata.";
+        let sourceCitation = "";
         
         if (wikiData.query.search.length > 0) {
-            searchContext = wikiData.query.search[0].snippet.replace(/<\/?[^>]+(>|$)/g, ""); // Strip HTML
+            const firstResult = wikiData.query.search[0];
+            searchContext = firstResult.snippet.replace(/<\/?[^>]+(>|$)/g, ""); // Strip HTML
+            sourceCitation = `Fonte: Wikipedia - "${firstResult.title}"`;
         }
 
         status.innerText = "🤖 Caricamento AI Locale (richiede qualche istante al primo avvio)...";
@@ -89,7 +92,10 @@ document.getElementById('btn-generate-news').addEventListener('click', async () 
         });
         
         let text = out[0].generated_text || searchContext;
-        teleprompter.value = `📰 NOTIZIA FLASH: ${topic.toUpperCase()}\n\n${text.trim()}`;
+        let finalOutput = `📰 NOTIZIA FLASH: ${topic.toUpperCase()}\n\n${text.trim()}`;
+        if (sourceCitation) finalOutput += `\n\n🔗 ${sourceCitation}`;
+        
+        teleprompter.value = finalOutput;
         status.innerText = "✅ Pronto!";
         
     } catch (err) {
