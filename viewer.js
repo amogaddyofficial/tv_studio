@@ -141,7 +141,7 @@ setInterval(renderSchedule, 10000); // Check every 10 seconds for timeline
 
 let peer = null;
 let dataConn = null;
-const STUDIO_FIXED_ID = 'canale100-live-broadcast';
+const STUDIO_FIXED_ID = 'canale100-live-broadcast-prod-v2';
 
 function connectToStudio() {
     btnReconnect.disabled = true;

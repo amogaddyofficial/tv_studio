@@ -147,7 +147,7 @@ renderStats();
 let peer = null;
 let viewers = new Map(); // viewerId -> dataConnection
 
-const STUDIO_FIXED_ID = 'canale100-live-broadcast';
+const STUDIO_FIXED_ID = 'canale100-live-broadcast-prod-v2';
 
 // Google Auth Callback
 window.handleCredentialResponse = function(response) {
@@ -180,6 +180,7 @@ window.handleCredentialResponse = function(response) {
 function initApp() {
     // Start mixing loop
     drawMixer();
+    initPeer();
 }
 
 function initPeer() {
