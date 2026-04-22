@@ -1,10 +1,21 @@
 const viewerVideo = document.getElementById('viewer-video');
 const offlineOverlay = document.getElementById('offline-overlay');
 const btnReconnect = document.getElementById('btn-reconnect');
-const viewerCountEl = document.getElementById('viewer-count');
 const scheduleListEl = document.getElementById('viewer-schedule');
+const ytContainer = document.getElementById('yt-container');
+const ytIframe = document.getElementById('yt-iframe');
+const offlineTitle = document.getElementById('offline-title');
+const offlineDesc = document.getElementById('offline-desc');
 
 let scheduleData = JSON.parse(sessionStorage.getItem('tv_schedule')) || [];
+let isLiveOffline = true;
+
+function getYouTubeId(url) {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+}
 
 function renderSchedule() {
     if (scheduleData.length === 0) {
@@ -18,6 +29,8 @@ function renderSchedule() {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
     scheduleData.sort((a, b) => a.time.localeCompare(b.time));
+    
+    let activeItem = null;
     
     scheduleData.forEach((item, index) => {
         const [h, m] = item.time.split(':').map(Number);
@@ -43,8 +56,33 @@ function renderSchedule() {
         }
         
         li.innerHTML = `<strong style="color: ${isActive ? 'var(--primary-color)' : 'white'};">${item.time}</strong> <span>${item.name}</span>`;
+        if (item.url) {
+            li.innerHTML += ` <span style="font-size:0.7rem; color:var(--danger-color);">▶ YT</span>`;
+        }
         scheduleListEl.appendChild(li);
+        
+        if (isActive) {
+            activeItem = item;
+        }
     });
+    
+    // Auto-TV logic
+    if (isLiveOffline && activeItem && activeItem.url) {
+        const ytId = getYouTubeId(activeItem.url);
+        if (ytId) {
+            if (ytIframe.src !== `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0`) {
+                ytIframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0`;
+            }
+            ytContainer.style.display = 'block';
+            offlineTitle.innerText = activeItem.name;
+            offlineDesc.style.display = 'none';
+        }
+    } else if (isLiveOffline) {
+        ytContainer.style.display = 'none';
+        ytIframe.src = "";
+        offlineTitle.innerText = 'Stream Offline';
+        offlineDesc.style.display = 'block';
+    }
 }
 renderSchedule();
 setInterval(renderSchedule, 60000); // update highlighting every minute
@@ -103,13 +141,25 @@ function connectToStudio() {
         console.log('Receiving broadcast...');
         call.answer(); 
         
-        call.on('stream', (remoteStream) => {
-            viewerVideo.srcObject = remoteStream;
-            offlineOverlay.style.display = 'none';
+        call.on('stream', (stream) => {
+            if (stream) {
+                viewerVideo.srcObject = stream;
+                offlineOverlay.style.display = 'none';
+                isLiveOffline = false;
+                renderSchedule(); // update layout since we are live
+            }
         });
 
         call.on('close', () => {
-            showOffline();
+            offlineOverlay.style.display = 'flex';
+            isLiveOffline = true;
+            renderSchedule();
+        });
+
+        call.on('error', () => {
+            offlineOverlay.style.display = 'flex';
+            isLiveOffline = true;
+            renderSchedule();
         });
     });
 

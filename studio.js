@@ -66,12 +66,14 @@ window.removeSchedule = function(index) {
 document.getElementById('btn-add-prog').addEventListener('click', () => {
     const t = document.getElementById('prog-time').value;
     const n = document.getElementById('prog-name').value;
+    const u = document.getElementById('prog-url').value;
     if (t && n) {
-        schedule.push({ time: t, name: n });
+        schedule.push({ time: t, name: n, url: u });
         localStorage.setItem('tv_schedule', JSON.stringify(schedule));
         renderSchedule();
         document.getElementById('prog-time').value = '';
         document.getElementById('prog-name').value = '';
+        document.getElementById('prog-url').value = '';
     }
 });
 
