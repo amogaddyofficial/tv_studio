@@ -24,17 +24,79 @@ document.querySelectorAll('.mixer-btn').forEach(btn => {
 });
 
 // Media Player Logic
+let mediaPlaylist = [];
+let currentMediaIndex = 0;
+
 document.getElementById('media-upload').addEventListener('change', (e) => {
-    const file = e.target.files[0];
+    mediaPlaylist = Array.from(e.target.files);
+    currentMediaIndex = 0;
+    
+    if (mediaPlaylist.length > 0) {
+        playMediaIndex(currentMediaIndex);
+        mediaPreview.style.display = 'block';
+        document.getElementById('layout-media').style.display = 'flex';
+    }
+});
+
+function playMediaIndex(index) {
+    if (index >= mediaPlaylist.length) {
+        index = 0; // loop playlist
+        currentMediaIndex = 0;
+    }
+    const file = mediaPlaylist[index];
     if (file) {
         const url = URL.createObjectURL(file);
         mediaPreview.src = url;
-        mediaPreview.style.display = 'block';
-        document.getElementById('layout-media').style.display = 'flex';
-        // Auto play preview muted
-        mediaPreview.muted = true;
-        mediaPreview.loop = true;
-        mediaPreview.play();
+        mediaPreview.muted = true; // muted per il regista
+        mediaPreview.loop = false; // non loopa il singolo file
+        mediaPreview.play().catch(e => console.error(e));
+        renderPlaylistUI();
+    }
+}
+
+function renderPlaylistUI() {
+    const ui = document.getElementById('media-playlist-ui');
+    if (!ui) return;
+    ui.innerHTML = '';
+    mediaPlaylist.forEach((file, idx) => {
+        const li = document.createElement('li');
+        li.style.padding = '2px 0';
+        li.innerText = `${idx + 1}. ${file.name}`;
+        if (idx === currentMediaIndex) {
+            li.style.color = 'var(--primary-color)';
+            li.style.fontWeight = 'bold';
+        }
+        ui.appendChild(li);
+    });
+}
+
+mediaPreview.addEventListener('ended', () => {
+    if (mediaPlaylist.length > 1) {
+        currentMediaIndex++;
+        playMediaIndex(currentMediaIndex);
+        
+        // Se siamo in onda con il layout media, il cambio file potrebbe far perdere la traccia audio a PeerJS.
+        // Tentiamo di ri-sostituire la traccia audio per gli spettatori se supportato (solo Chrome/Firefox recenti)
+        if (isBroadcasting && currentLayout === 'media' && mediaPreview.captureStream) {
+            setTimeout(() => {
+                try {
+                    mediaPreview.muted = false; // Riattiva l'audio per lo stream
+                    const newMStream = mediaPreview.captureStream();
+                    if(newMStream.getAudioTracks().length > 0) {
+                        const newAudioTrack = newMStream.getAudioTracks()[0];
+                        viewers.forEach(conn => {
+                            // Se PeerJS espone la peerConnection, possiamo provare a sostituire la traccia
+                            if (conn.peerConnection) {
+                                const sender = conn.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+                                if (sender) sender.replaceTrack(newAudioTrack);
+                            }
+                        });
+                    }
+                } catch(e) { console.log('Audio track swap non supportato', e); }
+            }, 500); // piccolo ritardo per permettere al file di iniziare
+        }
+    } else {
+        mediaPreview.play(); // loop singolo file
     }
 });
 
