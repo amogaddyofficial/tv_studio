@@ -13,11 +13,29 @@ const reconnectBox = document.getElementById('reconnect-box');
 let scheduleData = JSON.parse(sessionStorage.getItem('tv_schedule')) || [];
 let isLiveOffline = true;
 
-function getYouTubeId(url) {
+function getYouTubeDetails(url) {
     if (!url) return null;
+    let videoId = null;
+    let playlistId = null;
+    
+    // Video ID
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
+    if (match && match[2].length === 11) {
+        videoId = match[2];
+    }
+    
+    // Playlist ID
+    const listMatch = url.match(/[?&]list=([^#\&\?]+)/);
+    if (listMatch && listMatch[1]) {
+        playlistId = listMatch[1];
+    } else if (url.includes('playlist?list=')) {
+        const plMatch = url.match(/playlist\?list=([^#\&\?]+)/);
+        if (plMatch && plMatch[1]) playlistId = plMatch[1];
+    }
+
+    if (videoId || playlistId) return { videoId, playlistId };
+    return null;
 }
 
 function renderSchedule() {
@@ -97,11 +115,19 @@ function renderSchedule() {
         if (progressPct > 100) progressPct = 100;
         tvProgress.style.width = `${progressPct}%`;
 
-        const ytId = getYouTubeId(activeItem.url);
-        if (ytId) {
-            // Check if iframe needs update or is missing start time
-            if (!ytIframe.src.includes(ytId)) {
-                ytIframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&start=${diffSeconds}`;
+        const ytDetails = getYouTubeDetails(activeItem.url);
+        if (ytDetails) {
+            let identifier = ytDetails.videoId || ytDetails.playlistId;
+            // Check if iframe needs update
+            if (!ytIframe.src.includes(identifier)) {
+                let src = `https://www.youtube.com/embed/`;
+                if (ytDetails.videoId) {
+                    src += `${ytDetails.videoId}?autoplay=1&mute=0&start=${diffSeconds}`;
+                    if (ytDetails.playlistId) src += `&list=${ytDetails.playlistId}`;
+                } else {
+                    src += `videoseries?list=${ytDetails.playlistId}&autoplay=1&mute=0`;
+                }
+                ytIframe.src = src;
             }
             ytContainer.style.display = 'block';
             viewerVideo.style.display = 'none';
