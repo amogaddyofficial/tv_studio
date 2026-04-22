@@ -18,22 +18,29 @@ function getYouTubeDetails(url) {
     let videoId = null;
     let playlistId = null;
     
-    // Video ID
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    if (match && match[2].length === 11) {
-        videoId = match[2];
-    }
-    
-    // Playlist ID
-    const listMatch = url.match(/[?&]list=([^#\&\?]+)/);
-    if (listMatch && listMatch[1]) {
-        playlistId = listMatch[1];
-    } else if (url.includes('playlist?list=')) {
-        const plMatch = url.match(/playlist\?list=([^#\&\?]+)/);
-        if (plMatch && plMatch[1]) playlistId = plMatch[1];
-    }
+    try {
+        const urlObj = new URL(url);
+        if (urlObj.hostname.includes('youtube.com') || urlObj.hostname.includes('youtu.be')) {
+            if (urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v');
+            else if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.slice(1);
+            else if (urlObj.pathname.startsWith('/embed/')) videoId = urlObj.pathname.split('/')[2];
+            else if (urlObj.pathname.startsWith('/live/')) videoId = urlObj.pathname.split('/')[2];
+            else if (urlObj.pathname.startsWith('/shorts/')) videoId = urlObj.pathname.split('/')[2];
+            
+            if (urlObj.searchParams.has('list')) playlistId = urlObj.searchParams.get('list');
+            
+            if (videoId && videoId.length !== 11) videoId = null;
+            if (videoId || playlistId) return { videoId, playlistId };
+        }
+    } catch (e) {} // Fallback to regex
 
+    const videoRegExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+    const vMatch = url.match(videoRegExp);
+    if (vMatch && vMatch[1]) videoId = vMatch[1];
+    
+    const listMatch = url.match(/[?&]list=([^#\&\?]+)/i);
+    if (listMatch && listMatch[1]) playlistId = listMatch[1];
+    
     if (videoId || playlistId) return { videoId, playlistId };
     return null;
 }
