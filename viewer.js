@@ -1,17 +1,19 @@
 const viewerVideo = document.getElementById('viewer-video');
 const offlineOverlay = document.getElementById('offline-overlay');
-const joinIdInput = document.getElementById('join-id');
-const btnJoin = document.getElementById('btn-join');
+const btnReconnect = document.getElementById('btn-reconnect');
 const viewerCountEl = document.getElementById('viewer-count');
 
 let peer = null;
 let dataConn = null;
+const STUDIO_FIXED_ID = 'canale100-live-broadcast';
 
-function connectToStudio(studioId) {
-    if (!studioId) return alert('Please enter a Studio ID');
-    
-    btnJoin.disabled = true;
-    btnJoin.textContent = 'Connecting...';
+function connectToStudio() {
+    btnReconnect.disabled = true;
+    btnReconnect.textContent = 'Connessione...';
+
+    if (peer) {
+        peer.destroy();
+    }
 
     peer = new Peer({
         config: {'iceServers': [
@@ -22,12 +24,14 @@ function connectToStudio(studioId) {
     peer.on('open', (id) => {
         console.log('My Viewer ID:', id);
         
-        // Connect data channel to host
-        dataConn = peer.connect(studioId);
+        // Auto-connect to fixed studio ID
+        dataConn = peer.connect(STUDIO_FIXED_ID);
         
         dataConn.on('open', () => {
             console.log('Connected to Studio data channel');
-            btnJoin.textContent = 'Connected';
+            btnReconnect.textContent = 'Riprova a Connetterti';
+            offlineOverlay.querySelector('h2').textContent = 'In Attesa del Segnale...';
+            offlineOverlay.querySelector('p').textContent = 'Il Regista è connesso, in attesa della diretta.';
         });
 
         dataConn.on('data', (data) => {
@@ -37,17 +41,17 @@ function connectToStudio(studioId) {
         });
 
         dataConn.on('close', () => {
-            offlineOverlay.style.display = 'flex';
-            btnJoin.disabled = false;
-            btnJoin.textContent = 'Connect';
-            viewerVideo.srcObject = null;
+            showOffline();
+        });
+        
+        dataConn.on('error', () => {
+            showOffline();
         });
     });
 
-    // Receive media stream from Host
     peer.on('call', (call) => {
         console.log('Receiving broadcast...');
-        call.answer(); // Answer without sending any stream
+        call.answer(); 
         
         call.on('stream', (remoteStream) => {
             viewerVideo.srcObject = remoteStream;
@@ -55,26 +59,29 @@ function connectToStudio(studioId) {
         });
 
         call.on('close', () => {
-            offlineOverlay.style.display = 'flex';
-            viewerVideo.srcObject = null;
+            showOffline();
         });
     });
 
     peer.on('error', (err) => {
-        console.error(err);
-        alert('Connection error: ' + err.type);
-        btnJoin.disabled = false;
-        btnJoin.textContent = 'Connect';
+        console.log('Peer error:', err);
+        showOffline();
     });
 }
 
-btnJoin.addEventListener('click', () => {
-    connectToStudio(joinIdInput.value.trim());
+function showOffline() {
+    offlineOverlay.style.display = 'flex';
+    offlineOverlay.querySelector('h2').textContent = 'Stream Offline';
+    offlineOverlay.querySelector('p').textContent = 'La trasmissione non è ancora iniziata.';
+    btnReconnect.disabled = false;
+    btnReconnect.textContent = 'Riprova a Connetterti';
+    viewerVideo.srcObject = null;
+    viewerCountEl.textContent = "0";
+}
+
+btnReconnect.addEventListener('click', () => {
+    connectToStudio();
 });
 
-// Allow enter key
-joinIdInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        connectToStudio(joinIdInput.value.trim());
-    }
-});
+// Auto-connect on load
+connectToStudio();

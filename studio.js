@@ -4,7 +4,6 @@ const camVideo = document.getElementById('cam-video');
 const screenVideo = document.getElementById('screen-video');
 const layoutSelect = document.getElementById('layout-select');
 const viewerCountEl = document.getElementById('viewer-count');
-const studioIdInput = document.getElementById('studio-id');
 
 let camStream = null;
 let screenStream = null;
@@ -15,16 +14,62 @@ let isBroadcasting = false;
 let peer = null;
 let viewers = new Map(); // viewerId -> dataConnection
 
+const STUDIO_FIXED_ID = 'canale100-live-broadcast';
+
+// Google Auth Callback
+window.handleCredentialResponse = function(response) {
+    try {
+        const base64Url = response.credential.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        
+        const payload = JSON.parse(jsonPayload);
+        const email = payload.email.toLowerCase();
+        
+        // Autorizzazioni
+        const allowedEmails = ['amogaddyofficial@gmail.com'];
+        
+        if (allowedEmails.includes(email)) {
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('app-content').style.display = 'flex';
+            initApp();
+        } else {
+            document.getElementById('login-error').innerText = "Accesso negato. L'email " + email + " non è autorizzata.";
+        }
+    } catch (e) {
+        console.error(e);
+        document.getElementById('login-error').innerText = "Errore durante il login.";
+    }
+};
+
+function initApp() {
+    // Start mixing loop
+    drawMixer();
+}
+
 function initPeer() {
-    peer = new Peer({
+    // We use a fixed ID so viewers can connect automatically
+    peer = new Peer(STUDIO_FIXED_ID, {
         config: {'iceServers': [
             { url: 'stun:stun.l.google.com:19302' }
         ]}
     });
 
     peer.on('open', (id) => {
-        studioIdInput.value = id;
-        console.log('Studio ID:', id);
+        console.log('Studio Ready on ID:', id);
+    });
+
+    peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+            alert('Errore: C\'è già un Regista connesso a questo Canale!');
+            isBroadcasting = false;
+            document.getElementById('btn-stop').classList.add('hidden');
+            document.getElementById('btn-broadcast').classList.remove('hidden');
+        } else {
+            console.error('Peer error:', err);
+        }
     });
 
     peer.on('connection', (conn) => {
@@ -47,7 +92,6 @@ function initPeer() {
 function updateViewerCount() {
     const count = viewers.size;
     viewerCountEl.textContent = count;
-    // Broadcast count to all viewers
     viewers.forEach(conn => {
         if (conn.open) {
             conn.send({ type: 'viewers', count: count });
@@ -61,14 +105,14 @@ document.getElementById('btn-camera').addEventListener('click', async () => {
         if (camStream) {
             camStream.getTracks().forEach(t => t.stop());
             camStream = null;
-            document.getElementById('btn-camera').innerHTML = 'Enable Camera';
+            document.getElementById('btn-camera').innerHTML = 'Attiva Camera';
             document.getElementById('btn-camera').classList.remove('primary');
             document.getElementById('btn-camera').classList.add('secondary');
             return;
         }
         camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         camVideo.srcObject = camStream;
-        document.getElementById('btn-camera').innerHTML = 'Disable Camera';
+        document.getElementById('btn-camera').innerHTML = 'Disattiva Camera';
         document.getElementById('btn-camera').classList.remove('secondary');
         document.getElementById('btn-camera').classList.add('primary');
     } catch (err) {
@@ -82,20 +126,20 @@ document.getElementById('btn-screen').addEventListener('click', async () => {
         if (screenStream) {
             screenStream.getTracks().forEach(t => t.stop());
             screenStream = null;
-            document.getElementById('btn-screen').innerHTML = 'Share Screen';
+            document.getElementById('btn-screen').innerHTML = 'Condividi Schermo';
             document.getElementById('btn-screen').classList.remove('primary');
             document.getElementById('btn-screen').classList.add('secondary');
             return;
         }
         screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         screenVideo.srcObject = screenStream;
-        document.getElementById('btn-screen').innerHTML = 'Stop Screen';
+        document.getElementById('btn-screen').innerHTML = 'Interrompi Schermo';
         document.getElementById('btn-screen').classList.remove('secondary');
         document.getElementById('btn-screen').classList.add('primary');
         
         screenStream.getVideoTracks()[0].onended = () => {
             screenStream = null;
-            document.getElementById('btn-screen').innerHTML = 'Share Screen';
+            document.getElementById('btn-screen').innerHTML = 'Condividi Schermo';
             document.getElementById('btn-screen').classList.remove('primary');
             document.getElementById('btn-screen').classList.add('secondary');
         };
@@ -114,7 +158,6 @@ function drawMixer() {
     if (layout === 'screen-only' && screenStream) {
         ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
     } else if (layout === 'camera-only' && camStream) {
-        // center camera
         const aspect = camVideo.videoWidth / camVideo.videoHeight;
         const h = canvas.height;
         const w = h * aspect;
@@ -127,7 +170,6 @@ function drawMixer() {
             const pipW = 320;
             const pipH = 180;
             ctx.drawImage(camVideo, canvas.width - pipW - 20, canvas.height - pipH - 20, pipW, pipH);
-            // Border
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 2;
             ctx.strokeRect(canvas.width - pipW - 20, canvas.height - pipH - 20, pipW, pipH);
@@ -146,17 +188,12 @@ function drawMixer() {
     requestAnimationFrame(drawMixer);
 }
 
-// Start mixing loop
-drawMixer();
-
 // Broadcast Control
 document.getElementById('btn-broadcast').addEventListener('click', () => {
     if (!peer) initPeer();
     
-    // Create combined stream
     mixedStream = canvas.captureStream(30);
     
-    // If we have audio from camera, add it to the mixed stream
     if (camStream && camStream.getAudioTracks().length > 0) {
         mixedStream.addTrack(camStream.getAudioTracks()[0]);
     } else if (screenStream && screenStream.getAudioTracks().length > 0) {
@@ -167,7 +204,6 @@ document.getElementById('btn-broadcast').addEventListener('click', () => {
     document.getElementById('btn-broadcast').classList.add('hidden');
     document.getElementById('btn-stop').classList.remove('hidden');
     
-    // Send stream to all existing viewers
     viewers.forEach((conn, viewerId) => {
         peer.call(viewerId, mixedStream);
     });
@@ -177,22 +213,10 @@ document.getElementById('btn-stop').addEventListener('click', () => {
     isBroadcasting = false;
     document.getElementById('btn-stop').classList.add('hidden');
     document.getElementById('btn-broadcast').classList.remove('hidden');
-    // Stop all media calls? PeerJS doesn't have an easy "close all calls", but we can disconnect and reconnect or just stop sending data.
-    // For simplicity, let's destroy peer and re-init
     if (peer) {
         peer.destroy();
         viewers.clear();
         updateViewerCount();
-        initPeer();
+        peer = null;
     }
 });
-
-// Copy ID
-studioIdInput.addEventListener('click', () => {
-    studioIdInput.select();
-    document.execCommand('copy');
-    alert('Studio ID copied to clipboard!');
-});
-
-// Init on load
-initPeer();

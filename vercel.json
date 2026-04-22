@@ -1,25 +1,10 @@
 {
   "version": 2,
+  "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "kjh.Canale100.thetubes.net"
-        }
-      ],
+      "source": "/studio",
       "destination": "/studio.html"
-    },
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "Canale100.thetubes.net"
-        }
-      ],
-      "destination": "/index.html"
     }
   ]
 }
