@@ -6,6 +6,11 @@
     <title>Live Stream Viewer</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/bundle.min.js"></script>
+    <script>
+        window.SUPABASE_URL = 'https://fwompafuvvyvtvsknzqk.supabase.co';
+        window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b21wYWZ1dnZ5dnR2c2tuenFrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjE2MjAsImV4cCI6MjA5MjUzNzYyMH0.hKJFX1lVSRg8_HTxxyBcjAQlaWi4VMImPZBn5lEHaMk';
+    </script>
     <script>window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };</script>
     <script defer src="/_vercel/insights/script.js"></script>
 </head>
@@ -50,6 +55,7 @@
         </div>
     </main>
 
+    <script src="supabase-client.js"></script>
     <script src="viewer.js"></script>
 </body>
 </html>

@@ -101,41 +101,52 @@ mediaPreview.addEventListener('ended', () => {
 });
 
 // Palinsesto (Schedule) Logic
-let schedule = JSON.parse(localStorage.getItem('tv_schedule')) || [];
+let schedule = [];
+
+async function loadScheduleFromSupabase() {
+    schedule = await fetchSchedule();
+    renderSchedule();
+}
 
 function renderSchedule() {
     const list = document.getElementById('schedule-list');
     list.innerHTML = '';
-    // Sort by time
-    schedule.sort((a, b) => a.time.localeCompare(b.time));
+    schedule.sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
     schedule.forEach((item, index) => {
+        const displayTime = item.time || formatScheduleTime(item.scheduled_at);
         const li = document.createElement('li');
         li.style.display = 'flex';
         li.style.justifyContent = 'space-between';
         li.style.padding = '4px 0';
         li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-        li.innerHTML = `<span><strong>${item.time}</strong> - ${item.name}</span> <button class="danger" style="padding:2px 6px; font-size:0.6rem;" onclick="removeSchedule(${index})">X</button>`;
+        li.innerHTML = `<span><strong>${displayTime}</strong> - ${item.name}</span> <button class="danger" style="padding:2px 6px; font-size:0.6rem;" onclick="removeSchedule('${item.id}')">X</button>`;
         list.appendChild(li);
     });
 }
 
-window.removeSchedule = function(index) {
-    schedule.splice(index, 1);
-    localStorage.setItem('tv_schedule', JSON.stringify(schedule));
-    renderSchedule();
+window.removeSchedule = async function(id) {
+    const removed = await deleteScheduleItem(id);
+    if (removed) {
+        schedule = schedule.filter(item => item.id !== id);
+        renderSchedule();
+    }
 };
 
-document.getElementById('btn-add-prog').addEventListener('click', () => {
+document.getElementById('btn-add-prog').addEventListener('click', async () => {
     const t = document.getElementById('prog-time').value;
     const n = document.getElementById('prog-name').value;
     const u = document.getElementById('prog-url').value;
     if (t && n && u) {
-        schedule.push({ time: t, name: n, url: u });
-        localStorage.setItem('tv_schedule', JSON.stringify(schedule));
-        renderSchedule();
-        document.getElementById('prog-time').value = '';
-        document.getElementById('prog-name').value = '';
-        document.getElementById('prog-url').value = '';
+        try {
+            const newItem = await addScheduleItem({ time: t, name: n, url: u });
+            schedule.push(newItem);
+            renderSchedule();
+            document.getElementById('prog-time').value = '';
+            document.getElementById('prog-name').value = '';
+            document.getElementById('prog-url').value = '';
+        } catch (error) {
+            alert('Errore durante l\'aggiunta al palinsesto. Controlla la configurazione Supabase.');
+        }
     } else {
         alert("Inserisci Orario, Nome e Link Video (MP4 o YouTube)!");
     }
@@ -154,7 +165,7 @@ document.getElementById('btn-sync-schedule').addEventListener('click', () => {
     alert('Palinsesto sincronizzato agli spettatori!');
 });
 
-renderSchedule();
+loadScheduleFromSupabase();
 
 // Stats Logic (Storico Settimanale)
 let dailyStats = JSON.parse(localStorage.getItem('tv_stats')) || {};

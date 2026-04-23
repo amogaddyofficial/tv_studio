@@ -10,8 +10,36 @@ const tvTimeline = document.getElementById('tv-timeline');
 const tvProgress = document.getElementById('tv-progress');
 const reconnectBox = document.getElementById('reconnect-box');
 
-let scheduleData = JSON.parse(sessionStorage.getItem('tv_schedule')) || [];
+let scheduleData = [];
 let isLiveOffline = true;
+let currentActiveScheduleId = null;
+
+viewerVideo.addEventListener('ended', async () => {
+    if (currentActiveScheduleId && !getYouTubeDetails(viewerVideo.src)) {
+        await deleteScheduleItem(currentActiveScheduleId);
+        currentActiveScheduleId = null;
+        await loadViewerSchedule();
+    }
+});
+
+async function loadViewerSchedule() {
+    scheduleData = await fetchSchedule();
+    renderSchedule();
+}
+
+async function cleanupOldViewerItems() {
+    const now = new Date();
+    const staleItems = scheduleData.filter(item => {
+        const itemStart = new Date(item.scheduled_at);
+        return !Number.isNaN(itemStart.getTime()) && now - itemStart > 1000 * 60 * 60;
+    });
+    for (const item of staleItems) {
+        await deleteScheduleItem(item.id);
+    }
+    if (staleItems.length) {
+        await loadViewerSchedule();
+    }
+}
 
 function getYouTubeDetails(url) {
     if (!url) return null;
@@ -52,26 +80,23 @@ function renderSchedule() {
     }
     scheduleListEl.innerHTML = '';
     
-    // Check current time to highlight active program
     const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    
-    scheduleData.sort((a, b) => a.time.localeCompare(b.time));
+    scheduleData.sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
     
     let activeItem = null;
     
     scheduleData.forEach((item, index) => {
-        const [h, m] = item.time.split(':').map(Number);
-        const itemMins = h * 60 + m;
+        const itemStart = new Date(item.scheduled_at);
+        const itemMinutes = itemStart.getHours() * 60 + itemStart.getMinutes();
+        const nextItem = scheduleData[index + 1] ? new Date(scheduleData[index + 1].scheduled_at) : null;
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
         
-        // Very basic current program logic: it's the current if it's the last one that started before 'now'
         let isActive = false;
-        if (itemMins <= currentMinutes) {
-            if (index === scheduleData.length - 1 || (scheduleData[index+1] && currentMinutes < (scheduleData[index+1].time.split(':')[0]*60 + Number(scheduleData[index+1].time.split(':')[1])))) {
-                isActive = true;
-            }
+        if (itemStart <= now && (!nextItem || now < nextItem)) {
+            isActive = true;
         }
         
+        const displayTime = item.time || itemStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const li = document.createElement('li');
         li.style.padding = '10px';
         li.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
@@ -83,7 +108,7 @@ function renderSchedule() {
             li.style.borderLeft = '3px solid var(--primary-color)';
         }
         
-        li.innerHTML = `<strong style="color: ${isActive ? 'var(--primary-color)' : 'white'};">${item.time}</strong> <span>${item.name}</span>`;
+        li.innerHTML = `<strong style="color: ${isActive ? 'var(--primary-color)' : 'white'};">${displayTime}</strong> <span>${item.name}</span>`;
         if (item.url) {
             li.innerHTML += ` <span style="font-size:0.7rem; color:var(--danger-color);">▶ YT</span>`;
         }
@@ -94,29 +119,19 @@ function renderSchedule() {
         }
     });
     
-    // Auto-TV logic
     if (isLiveOffline && activeItem && activeItem.url) {
-        
-        // Calculate diffSeconds for Fake Live
-        const activeStart = new Date();
-        const [ah, am] = activeItem.time.split(':').map(Number);
-        activeStart.setHours(ah, am, 0, 0);
+        const activeStart = new Date(activeItem.scheduled_at);
         let diffSeconds = Math.floor((now - activeStart) / 1000);
         if (diffSeconds < 0) diffSeconds = 0;
         
-        // Determine End Time (next program or +1 hour)
-        let totalSeconds = 3600; // default 1 hour
-        let activeIdx = scheduleData.indexOf(activeItem);
+        let totalSeconds = 3600;
+        const activeIdx = scheduleData.indexOf(activeItem);
         if (activeIdx < scheduleData.length - 1) {
             const nextItem = scheduleData[activeIdx + 1];
-            const [nh, nm] = nextItem.time.split(':').map(Number);
-            const nextStart = new Date();
-            nextStart.setHours(nh, nm, 0, 0);
-            if (nextStart < activeStart) nextStart.setDate(nextStart.getDate() + 1);
-            totalSeconds = Math.floor((nextStart - activeStart) / 1000);
+            const nextStart = new Date(nextItem.scheduled_at);
+            totalSeconds = Math.max(60, Math.floor((nextStart - activeStart) / 1000));
         }
         
-        // Update timeline bar
         tvTimeline.style.display = 'block';
         let progressPct = (diffSeconds / totalSeconds) * 100;
         if (progressPct > 100) progressPct = 100;
@@ -125,7 +140,6 @@ function renderSchedule() {
         const ytDetails = getYouTubeDetails(activeItem.url);
         if (ytDetails) {
             let identifier = ytDetails.videoId || ytDetails.playlistId;
-            // Check if iframe needs update
             if (!ytIframe.src.includes(identifier)) {
                 let src = `https://www.youtube.com/embed/`;
                 if (ytDetails.videoId) {
@@ -138,8 +152,8 @@ function renderSchedule() {
             }
             ytContainer.style.display = 'block';
             viewerVideo.style.display = 'none';
+            currentActiveScheduleId = activeItem.id;
         } else {
-            // Assume MP4
             ytContainer.style.display = 'none';
             viewerVideo.style.display = 'block';
             if (viewerVideo.src !== activeItem.url) {
@@ -148,13 +162,14 @@ function renderSchedule() {
                 viewerVideo.currentTime = diffSeconds;
                 viewerVideo.play().catch(e => console.log('Autoplay blocked', e));
             }
+            currentActiveScheduleId = activeItem.id;
         }
         
         offlineTitle.innerText = activeItem.name;
         offlineDesc.style.display = 'none';
         reconnectBox.style.display = 'flex';
-        
     } else if (isLiveOffline) {
+        currentActiveScheduleId = null;
         tvTimeline.style.display = 'none';
         ytContainer.style.display = 'none';
         viewerVideo.style.display = 'block';
@@ -165,12 +180,12 @@ function renderSchedule() {
         offlineDesc.style.display = 'block';
         reconnectBox.style.display = 'flex';
     } else {
-        // Live stream active
         tvTimeline.style.display = 'none';
     }
 }
-renderSchedule();
-setInterval(renderSchedule, 10000); // Check every 10 seconds for timeline
+loadViewerSchedule();
+setInterval(loadViewerSchedule, 10000);
+setInterval(cleanupOldViewerItems, 60000);
 
 let peer = null;
 let dataConn = null;
