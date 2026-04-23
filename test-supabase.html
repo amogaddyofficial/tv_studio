@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/bundle.min.js"></script>
+    <script>
+        window.SUPABASE_URL = 'https://fwompafuvvyvtvsknzqk.supabase.co';
+        window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3b21wYWZ1dnZ5dnR2c2tuenFrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NjE2MjAsImV4cCI6MjA5MjUzNzYyMH0.hKJFX1lVSRg8_HTxxyBcjAQlaWi4VMImPZBn5lEHaMk';
+    </script>
+    <script src="supabase-client.js"></script>
+</head>
+<body>
+    <h1>Test Supabase Connection</h1>
+    <button onclick="testConnection()">Test Connection</button>
+    <button onclick="testTable()">Test Table 'palinsesto'</button>
+    <button onclick="testBucket()">Test Bucket 'schedule-media'</button>
+    <button onclick="createTestItem()">Create Test Item</button>
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+
+        async function testConnection() {
+            try {
+                const supabase = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+                const { data, error } = await supabase.from('palinsesto').select('count').limit(1);
+                if (error) throw error;
+                results.innerHTML += '<p>✅ Connection OK</p>';
+            } catch (e) {
+                results.innerHTML += '<p>❌ Connection Error: ' + e.message + '</p>';
+            }
+        }
+
+        async function testTable() {
+            try {
+                const schedule = await fetchSchedule();
+                results.innerHTML += '<p>✅ Table OK - Items: ' + schedule.length + '</p>';
+            } catch (e) {
+                results.innerHTML += '<p>❌ Table Error: ' + e.message + '</p>';
+            }
+        }
+
+        async function testBucket() {
+            try {
+                const supabase = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+                const { data, error } = await supabase.storage.listBuckets();
+                if (error) throw error;
+                const bucketExists = data.some(b => b.name === 'schedule-media');
+                if (bucketExists) {
+                    results.innerHTML += '<p>✅ Bucket "schedule-media" exists</p>';
+                } else {
+                    results.innerHTML += '<p>❌ Bucket "schedule-media" not found. Create it in Supabase Dashboard > Storage</p>';
+                }
+            } catch (e) {
+                results.innerHTML += '<p>❌ Bucket Error: ' + e.message + '</p>';
+            }
+        }
+
+        async function createTestItem() {
+            try {
+                const testItem = await addScheduleItem({
+                    name: 'Test Program',
+                    url: 'https://example.com/test.mp4',
+                    time: '12:00'
+                });
+                results.innerHTML += '<p>✅ Test Item Created: ' + JSON.stringify(testItem) + '</p>';
+            } catch (e) {
+                results.innerHTML += '<p>❌ Create Error: ' + e.message + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>

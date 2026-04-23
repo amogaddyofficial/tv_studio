@@ -31,7 +31,16 @@ Esempio di policy per `public`:
 - INSERT: `true`
 - DELETE: `true`
 
+Per il bucket `schedule-media`:
+
+- Policy per upload: `true` (per INSERT)
+- Policy per lettura: `true` (per SELECT)
+
 > In produzione, è consigliato proteggere meglio le policy e usare una API backend con la chiave di servizio, invece della sola chiave anonima sul client.
+
+## Test della configurazione
+
+Apri `test-supabase.html` nel browser per verificare che tutto funzioni correttamente.
 
 ## File importanti
 
@@ -40,6 +49,7 @@ Esempio di policy per `public`:
 - `supabase-client.js`: inizializza Supabase e gestisce fetch/insert/delete.
 - `studio.js`: carica e sincronizza il palinsesto, crea i programmi in Supabase.
 - `viewer.js`: recupera il palinsesto da Supabase, riproduce i programmi e rimuove gli elementi già riprodotti.
+- `test-supabase.html`: script di test per verificare la connessione Supabase.
 
 ## Note
 
