@@ -67,6 +67,35 @@
         };
     }
 
+    async function uploadMediaFile(file) {
+        if (!file) {
+            throw new Error('Nessun file selezionato.');
+        }
+
+        const filePath = `schedule-media/${Date.now()}_${file.name}`;
+        const { data, error: uploadError } = await supabaseClient
+            .storage
+            .from('schedule-media')
+            .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) {
+            console.error('[Supabase] uploadMediaFile error:', uploadError);
+            throw uploadError;
+        }
+
+        const { data: publicUrlData, error: urlError } = supabaseClient
+            .storage
+            .from('schedule-media')
+            .getPublicUrl(filePath);
+
+        if (urlError) {
+            console.error('[Supabase] getPublicUrl error:', urlError);
+            throw urlError;
+        }
+
+        return publicUrlData.publicUrl;
+    }
+
     async function deleteScheduleItem(id) {
         if (!id) return false;
         const { error } = await supabaseClient
@@ -99,6 +128,7 @@
 
     window.fetchSchedule = fetchSchedule;
     window.addScheduleItem = addScheduleItem;
+    window.uploadMediaFile = uploadMediaFile;
     window.deleteScheduleItem = deleteScheduleItem;
     window.cleanupOldScheduleItems = cleanupOldScheduleItems;
     window.formatScheduleTime = formatScheduleTime;

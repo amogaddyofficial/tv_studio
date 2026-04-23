@@ -135,20 +135,32 @@ window.removeSchedule = async function(id) {
 document.getElementById('btn-add-prog').addEventListener('click', async () => {
     const t = document.getElementById('prog-time').value;
     const n = document.getElementById('prog-name').value;
-    const u = document.getElementById('prog-url').value;
-    if (t && n && u) {
-        try {
-            const newItem = await addScheduleItem({ time: t, name: n, url: u });
-            schedule.push(newItem);
-            renderSchedule();
-            document.getElementById('prog-time').value = '';
-            document.getElementById('prog-name').value = '';
-            document.getElementById('prog-url').value = '';
-        } catch (error) {
-            alert('Errore durante l\'aggiunta al palinsesto. Controlla la configurazione Supabase.');
+    const u = document.getElementById('prog-url').value.trim();
+    const fileInput = document.getElementById('prog-file-upload');
+    const file = fileInput.files[0];
+
+    if (!t || !n || (!file && !u)) {
+        alert("Inserisci Orario, Nome e un file o un URL MP4/YouTube!");
+        return;
+    }
+
+    try {
+        let mediaUrl = u;
+        if (file) {
+            mediaUrl = await uploadMediaFile(file);
         }
-    } else {
-        alert("Inserisci Orario, Nome e Link Video (MP4 o YouTube)!");
+
+        const newItem = await addScheduleItem({ time: t, name: n, url: mediaUrl });
+        schedule.push(newItem);
+        renderSchedule();
+
+        document.getElementById('prog-time').value = '';
+        document.getElementById('prog-name').value = '';
+        document.getElementById('prog-url').value = '';
+        fileInput.value = '';
+    } catch (error) {
+        console.error('Errore aggiunta palinsesto:', error);
+        alert('Errore durante l\'aggiunta al palinsesto. Controlla la configurazione Supabase.');
     }
 });
 

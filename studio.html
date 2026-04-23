@@ -92,7 +92,8 @@
                     <div style="display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap;">
                         <input type="time" id="prog-time" style="padding:5px; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px; flex:1;" required>
                         <input type="text" id="prog-name" placeholder="Nome Programma" style="flex:2; padding:5px; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px;" required>
-                        <input type="text" id="prog-url" placeholder="Link MP4 o YouTube (Obbligatorio per offline)" style="width:100%; padding:5px; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px;" required>
+                        <input type="file" id="prog-file-upload" accept="video/*,audio/*" style="width:100%; padding:5px; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px;">
+                        <input type="text" id="prog-url" placeholder="Oppure inserisci un URL MP4 o YouTube" style="width:100%; padding:5px; background:rgba(0,0,0,0.5); color:white; border:1px solid rgba(255,255,255,0.2); border-radius:4px;">
                         <button id="btn-add-prog" class="primary" style="width:100%; justify-content:center; padding:5px;">Aggiungi al Palinsesto</button>
                     </div>
                     <ul id="schedule-list" style="list-style:none; max-height:120px; overflow-y:auto; font-size:0.85rem; border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:5px; background:rgba(0,0,0,0.2);">

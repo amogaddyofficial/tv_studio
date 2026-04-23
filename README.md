@@ -17,7 +17,9 @@ create table palinsesto (
 );
 ```
 
-3. Abilita `uuid-ossp` o `pgcrypto` se necessario per generare UUID.
+4. Crea un bucket Supabase Storage pubblico chiamato `schedule-media` per caricare i file video/audio che userai nel palinsesto.
+
+5. Abilita `uuid-ossp` o `pgcrypto` se necessario per generare UUID.
 
 ## Permessi
 
