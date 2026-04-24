@@ -108,6 +108,19 @@ async function loadScheduleFromSupabase() {
     renderSchedule();
 }
 
+function getErrorMessage(error) {
+    if (!error) return 'Errore sconosciuto';
+    if (typeof error === 'string') return error;
+    if (error.message) return error.message;
+    if (error.error) return error.error;
+    if (error.details) return error.details;
+    try {
+        return JSON.stringify(error);
+    } catch (e) {
+        return String(error);
+    }
+}
+
 function renderSchedule() {
     const list = document.getElementById('schedule-list');
     list.innerHTML = '';
@@ -160,7 +173,8 @@ document.getElementById('btn-add-prog').addEventListener('click', async () => {
         fileInput.value = '';
     } catch (error) {
         console.error('Errore aggiunta palinsesto:', error);
-        alert('Errore durante l\'aggiunta al palinsesto. Controlla la configurazione Supabase.');
+        const message = getErrorMessage(error);
+        alert(`Errore durante l'aggiunta al palinsesto: ${message}`);
     }
 });
 
@@ -355,23 +369,64 @@ document.getElementById('btn-screen').addEventListener('click', async () => {
             document.getElementById('btn-screen').innerHTML = 'Condividi Schermo';
             document.getElementById('btn-screen').classList.remove('primary');
             document.getElementById('btn-screen').classList.add('secondary');
+            document.getElementById('screen-status').style.display = 'none';
             return;
         }
-        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+
+        // Verifica supporto browser
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            alert('La condivisione schermo non è supportata da questo browser. Usa Chrome, Firefox o Edge.');
+            return;
+        }
+
+        // Verifica HTTPS (richiesto per getDisplayMedia)
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            alert('La condivisione schermo richiede una connessione HTTPS. Apri la pagina con https:// o localhost.');
+            return;
+        }
+
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { mediaSource: 'screen' },
+            audio: true
+        });
+
         screenVideo.srcObject = screenStream;
-        screenVideo.play().catch(e => console.error('Play error:', e));
+        screenVideo.play().catch(e => console.error('Errore riproduzione video schermo:', e));
+
+        // Aspetta che il video sia pronto
+        screenVideo.onloadedmetadata = () => {
+            console.log('Schermo caricato:', screenVideo.videoWidth, 'x', screenVideo.videoHeight);
+            document.getElementById('screen-status').style.display = 'block';
+        };
+
         document.getElementById('btn-screen').innerHTML = 'Interrompi Schermo';
         document.getElementById('btn-screen').classList.remove('secondary');
         document.getElementById('btn-screen').classList.add('primary');
-        
+
         screenStream.getVideoTracks()[0].onended = () => {
             screenStream = null;
             document.getElementById('btn-screen').innerHTML = 'Condividi Schermo';
             document.getElementById('btn-screen').classList.remove('primary');
             document.getElementById('btn-screen').classList.add('secondary');
+            document.getElementById('screen-status').style.display = 'none';
         };
     } catch (err) {
-        console.error('Error accessing screen:', err);
+        console.error('Errore condivisione schermo:', err);
+        let message = 'Errore durante la condivisione schermo: ';
+
+        if (err.name === 'NotAllowedError') {
+            message += 'Permesso negato. Devi consentire la condivisione schermo.';
+        } else if (err.name === 'NotFoundError') {
+            message += 'Nessuna fonte schermo trovata.';
+        } else if (err.name === 'NotReadableError') {
+            message += 'La fonte schermo è già in uso da un\'altra applicazione.';
+        } else if (err.name === 'OverconstrainedError') {
+            message += 'Vincoli media non soddisfatti.';
+        } else {
+            message += err.message || 'Errore sconosciuto.';
+        }
+
+        alert(message);
     }
 });
 
@@ -379,9 +434,18 @@ document.getElementById('btn-screen').addEventListener('click', async () => {
 function drawMixer() {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    if (currentLayout === 'screen-only' && screenStream) {
-        ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+
+    if (currentLayout === 'screen-only' && screenStream && screenVideo.readyState >= 2 && screenVideo.videoWidth > 0) {
+        try {
+            ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+        } catch (e) {
+            console.warn('Errore rendering schermo:', e);
+            // Fallback: mostra messaggio
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Schermo non disponibile', canvas.width/2, canvas.height/2);
+        }
     } else if (currentLayout === 'media' && !mediaPreview.paused) {
         ctx.drawImage(mediaPreview, 0, 0, canvas.width, canvas.height);
     } else if (currentLayout === 'camera-only' && camStream) {
@@ -390,8 +454,12 @@ function drawMixer() {
         const w = h * aspect;
         ctx.drawImage(camVideo, (canvas.width - w) / 2, 0, w, h);
     } else if (currentLayout === 'pip') {
-        if (screenStream) {
-            ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+        if (screenStream && screenVideo.readyState >= 2 && screenVideo.videoWidth > 0) {
+            try {
+                ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+            } catch (e) {
+                console.warn('Errore rendering schermo in PiP:', e);
+            }
         }
         if (camStream) {
             const pipW = 320;
@@ -402,11 +470,19 @@ function drawMixer() {
             ctx.strokeRect(canvas.width - pipW - 20, canvas.height - pipH - 20, pipW, pipH);
         }
     } else if (currentLayout === 'split') {
-        if (camStream && screenStream) {
-            ctx.drawImage(camVideo, 0, canvas.height/4, canvas.width/2, canvas.height/2);
-            ctx.drawImage(screenVideo, canvas.width/2, 0, canvas.width/2, canvas.height);
-        } else if (screenStream) {
-            ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+        if (camStream && screenStream && screenVideo.readyState >= 2 && screenVideo.videoWidth > 0) {
+            try {
+                ctx.drawImage(camVideo, 0, canvas.height/4, canvas.width/2, canvas.height/2);
+                ctx.drawImage(screenVideo, canvas.width/2, 0, canvas.width/2, canvas.height);
+            } catch (e) {
+                console.warn('Errore rendering split screen:', e);
+            }
+        } else if (screenStream && screenVideo.readyState >= 2 && screenVideo.videoWidth > 0) {
+            try {
+                ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+            } catch (e) {
+                console.warn('Errore rendering solo schermo:', e);
+            }
         } else if (camStream) {
             ctx.drawImage(camVideo, 0, 0, canvas.width, canvas.height);
         }
