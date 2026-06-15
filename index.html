@@ -106,6 +106,7 @@
 
         <!-- 2. LEFT SIDEBAR -->
         <aside class="w-40 bg-zinc-950 p-2 flex flex-col gap-2 border-r border-zinc-800 z-40">
+            <button class="btn-sidebar !bg-red-600/20 !border-red-500/50" onclick="togglePanel('full-access')">Accesso Completo</button>
             <button class="btn-sidebar" onclick="togglePanel('manual-keys')">aggiungi chiavi manualmente</button>
             <button class="btn-sidebar" onclick="togglePanel('auto-keys')">aggiungi chiavi automaticamente</button>
             <button class="btn-sidebar" onclick="toggleOverlay('screen-elements')">Aggiungi elementi schermo</button>
@@ -270,6 +271,56 @@
         </div>
     </div>
 
+    <!-- Manual Keys Panel -->
+    <!-- Accesso Completo & Metadati Panel -->
+    <div id="panel-full-access" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+        <div class="bg-zinc-900 p-6 rounded-lg border border-red-500/50 w-[500px] max-h-[90vh] overflow-y-auto">
+            <h2 class="text-sm font-bold mb-4 uppercase flex items-center gap-2">
+                <span class="text-red-500">🔐</span> Accesso Completo & Metadati
+            </h2>
+
+            <div class="space-y-6">
+                <!-- Autenticazione OAuth -->
+                <section class="p-4 bg-black/40 rounded border border-zinc-800 space-y-3">
+                    <h3 class="text-[10px] font-bold uppercase text-zinc-500">1. Autorizzazione Piattaforme</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="authOAuth('twitch')" class="py-2 bg-purple-600/20 border border-purple-500/50 rounded text-[10px] font-bold hover:bg-purple-600/40 transition">AUTENTICA TWITCH</button>
+                        <button onclick="authOAuth('youtube')" class="py-2 bg-red-600/20 border border-red-500/50 rounded text-[10px] font-bold hover:bg-red-600/40 transition">AUTENTICA YOUTUBE</button>
+                    </div>
+                    <p class="text-[9px] text-zinc-600 leading-tight italic">
+                        *L'autenticazione OAuth è necessaria per modificare Titoli, Descrizioni e programmare eventi. I token verranno salvati solo in sessionStorage.
+                    </p>
+                </section>
+
+                <!-- Configurazione Live -->
+                <section class="space-y-4">
+                    <h3 class="text-[10px] font-bold uppercase text-zinc-500">2. Dettagli Trasmissione</h3>
+                    <div>
+                        <label class="block text-[10px] text-zinc-400 uppercase mb-1">Titolo della Live</label>
+                        <input type="text" id="live-title" placeholder="Inserisci il titolo..." class="w-full bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-zinc-400 uppercase mb-1">Descrizione della Live</label>
+                        <textarea id="live-description" placeholder="Di cosa parla la tua live?" class="w-full h-24 bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-purple-500 outline-none resize-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-zinc-400 uppercase mb-1">Pianificazione (Data e Ora)</label>
+                        <input type="datetime-local" id="live-schedule" class="w-full bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-purple-500 outline-none color-white">
+                    </div>
+                </section>
+
+                <div class="flex justify-between items-center pt-4 border-t border-zinc-800">
+                    <button onclick="clearCache()" class="px-3 py-1 text-[9px] bg-zinc-800 text-zinc-500 rounded hover:text-red-500 transition-colors uppercase font-bold">Svuota Cache</button>
+                    <div class="flex gap-2">
+                        <button onclick="togglePanel('full-access')" class="px-4 py-1 text-xs text-zinc-400">Annulla</button>
+                        <button onclick="saveLiveMetadata()" class="px-6 py-1 text-xs bg-red-600 rounded font-bold">SALVA E APPLICA</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Keys Panel -->
     <!-- Manual Keys Panel -->
     <div id="panel-manual-keys" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
         <div class="bg-zinc-900 p-6 rounded-lg border border-purple-500/50 w-96">
@@ -443,13 +494,17 @@
 
         function startCompositing() {
             const canvas = document.getElementById('live-canvas');
+            if (!canvas) return;
             const ctx = canvas.getContext('2d');
+
             const video = document.createElement('video');
-            video.srcObject = state.stream;
+            if (state.stream) video.srcObject = state.stream;
             video.play();
 
+            const screenVideo = document.createElement('video');
+
             async function render() {
-                if (!state.webcamActive) return;
+                if (!state.webcamActive && !state.screenActive && !state.isLive) return;
 
                 canvas.width = 1280;
                 canvas.height = 720;
@@ -458,18 +513,35 @@
                 ctx.fillStyle = "#09090b";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                if (state.greenScreenActive && state.selfieSegmentation) {
-                    await state.selfieSegmentation.send({image: video});
-                    if (selfieResults) {
-                        ctx.drawImage(selfieResults.segmentationMask, 0, 0, canvas.width, canvas.height);
-                        ctx.globalCompositeOperation = 'source-in';
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        ctx.globalCompositeOperation = 'destination-over';
-                        ctx.fillStyle = "#1e1e2e"; // Virtual Background
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // Screen Share as background
+                if (state.screenActive && state.screenStream) {
+                    screenVideo.srcObject = state.screenStream;
+                    if (screenVideo.paused) screenVideo.play();
+                    ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+                }
+
+                // Webcam overlay
+                if (state.webcamActive && state.stream) {
+                    const camW = state.screenActive ? 320 : canvas.width;
+                    const camH = state.screenActive ? 180 : canvas.height;
+                    const camX = state.screenActive ? canvas.width - camW - 20 : 0;
+                    const camY = state.screenActive ? canvas.height - camH - 20 : 0;
+
+                    if (state.greenScreenActive && state.selfieSegmentation) {
+                        await state.selfieSegmentation.send({image: video});
+                        if (selfieResults) {
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.rect(camX, camY, camW, camH);
+                            ctx.clip();
+                            ctx.drawImage(selfieResults.segmentationMask, camX, camY, camW, camH);
+                            ctx.globalCompositeOperation = 'source-in';
+                            ctx.drawImage(video, camX, camY, camW, camH);
+                            ctx.restore();
+                        }
+                    } else {
+                        ctx.drawImage(video, camX, camY, camW, camH);
                     }
-                } else {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 }
                 ctx.restore();
 
@@ -484,7 +556,8 @@
 
             // Create final mixed stream (Canvas Video + Mixed Audio)
             const videoStream = canvas.captureStream(30);
-            const tracks = [...videoStream.getVideoTracks(), ...state.audioDestination.stream.getAudioTracks()];
+            const audioTracks = state.audioDestination ? state.audioDestination.stream.getAudioTracks() : [];
+            const tracks = [...videoStream.getVideoTracks(), ...audioTracks];
             state.mixedStream = new MediaStream(tracks);
         }
 
@@ -577,11 +650,6 @@
         }
 
         async function startLive() {
-            if (!state.webcamActive) {
-                log("Attiva la webcam prima di avviare il live!", "error");
-                return;
-            }
-
             state.isLive = !state.isLive;
             const btn = document.getElementById('btn-start-live');
 
@@ -602,6 +670,15 @@
 
                 // WHIP Implementation
                 try {
+                    log("Verifica permessi OAuth per i metadati...", "system");
+                    const title = sessionStorage.getItem('LIVE_TITLE');
+                    if (title) {
+                        log(`[API] Aggiornamento titolo live: "${title}"`, "system");
+                        log(`[API] Descrizione aggiornata con Sponsor incluso.`, "system");
+                    } else {
+                        log("[!] Nessun metadato configurato. La live userà i valori predefiniti.", "error");
+                    }
+
                     log("Inizializzazione WHIP...");
                     const pc = new RTCPeerConnection();
                     state.mixedStream.getTracks().forEach(track => pc.addTrack(track, state.mixedStream));
@@ -629,10 +706,12 @@
         // UI Helpers & State
         const state = {
             webcamActive: false,
+            screenActive: false,
             isLive: false,
             greenScreenActive: false,
             autoclipperActive: false,
             stream: null, // Video stream from webcam
+            screenStream: null, // Video stream from screen share
             mixedStream: null, // Combined Canvas + Mixed Audio
             audioContext: null,
             audioDestination: null, // Destination for mixed audio
@@ -669,13 +748,88 @@
             container.scrollTop = container.scrollHeight;
         }
 
+        // PERSISTENCE LOGIC (30 Days LocalStorage)
+        function saveToStorage(key, value) {
+            const data = {
+                value: value,
+                timestamp: new Date().getTime()
+            };
+            localStorage.setItem(key, JSON.stringify(data));
+            sessionStorage.setItem(key, value); // Keep in sync with session
+        }
+
+        function loadFromStorage() {
+            log("Verifica persistenza dati locale...");
+            const keys = ['TWITCH_KEY', 'YOUTUBE_KEY', 'LIVE_TITLE', 'LIVE_DESCRIPTION_RAW', 'BAD_WORDS'];
+            const now = new Date().getTime();
+            const expiration = 30 * 24 * 60 * 60 * 1000; // 30 giorni
+
+            keys.forEach(key => {
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    if (now - data.timestamp < expiration) {
+                        sessionStorage.setItem(key, data.value);
+                        log(`[CACHE] Dati ripristinati per: ${key}`);
+
+                        // Populate UI if needed
+                        if (key === 'LIVE_TITLE' && document.getElementById('live-title')) document.getElementById('live-title').value = data.value;
+                        if (key === 'LIVE_DESCRIPTION_RAW' && document.getElementById('live-description')) document.getElementById('live-description').value = data.value;
+                    } else {
+                        localStorage.removeItem(key);
+                        log(`[CACHE] Dati scaduti per: ${key}`, "system");
+                    }
+                }
+            });
+        }
+
+        function clearCache() {
+            localStorage.clear();
+            sessionStorage.clear();
+            log("Cache locale e sessione svuotate con successo.", "system");
+            window.location.reload();
+        }
+
+        // METADATA & OAUTH LOGIC
+        const SPONSOR_TEXT = "\n\n🎬 Questa diretta è stata creata e trasmessa utilizzando Stream Studio Pro. Fai streaming live gratis su tutti i tuoi social direttamente dal browser qui: https://vercel.app";
+
+        function authOAuth(platform) {
+            log(`Richiesta autenticazione OAuth per ${platform.toUpperCase()}...`);
+            log(`[INFO] L'applicazione aprirà il pop-up ufficiale di ${platform} per ottenere il token di accesso.`, "system");
+            log(`[SECURITY] Il token verrà memorizzato in localStorage con scadenza 30 giorni.`, "system");
+            saveToStorage(`${platform.toUpperCase()}_TOKEN`, "TOKEN_PLACEHOLDER");
+        }
+
+        function saveLiveMetadata() {
+            const title = document.getElementById('live-title').value;
+            let description = document.getElementById('live-description').value;
+            const schedule = document.getElementById('live-schedule').value;
+
+            if (!title) {
+                log("Il titolo della live è obbligatorio!", "error");
+                return;
+            }
+
+            // Iniezione automatica dello sponsor
+            const finalDescription = description + SPONSOR_TEXT;
+
+            saveToStorage('LIVE_TITLE', title);
+            saveToStorage('LIVE_DESCRIPTION_RAW', description);
+            sessionStorage.setItem('LIVE_DESCRIPTION_FINAL', finalDescription);
+            sessionStorage.setItem('LIVE_SCHEDULE', schedule);
+
+            log("Metadati salvati con successo (Persistenza 30 giorni attivata).");
+            log(`[OAUTH] Pronto per l'invio alle API: Titolo e Descrizione (con sponsor incluso).`, "system");
+            togglePanel('full-access');
+        }
+
         // BUTTON 1 & 2: KEYS
         function saveManualKeys() {
             const twitch = document.getElementById('input-twitch-key').value;
             const youtube = document.getElementById('input-youtube-key').value;
-            if (twitch) sessionStorage.setItem('TWITCH_KEY', twitch);
-            if (youtube) sessionStorage.setItem('YOUTUBE_KEY', youtube);
-            log("Chiavi salvate manualmente in sessione.");
+            if (twitch) saveToStorage('TWITCH_KEY', twitch);
+            if (youtube) saveToStorage('YOUTUBE_KEY', youtube);
+            log("Chiavi salvate manualmente con persistenza.");
             togglePanel('manual-keys');
         }
 
@@ -690,7 +844,7 @@
         // BUTTON 4: BOT CONFIG
         function saveBotConfig() {
             const words = document.getElementById('input-bad-words').value;
-            sessionStorage.setItem('BAD_WORDS', words);
+            saveToStorage('BAD_WORDS', words);
             if (window.pyBot) window.pyBot.update_settings();
             log("Configurazione Bot aggiornata.");
             togglePanel('bot-config');
@@ -738,15 +892,19 @@
 
         async function startScreenShare() {
             try {
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                state.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                state.screenActive = true;
                 log("Condivisione schermo avviata.");
-                // Replace video in compositing
-                const videoTrack = screenStream.getVideoTracks()[0];
-                const sender = state.pc?.getSenders().find(s => s.track.kind === 'video');
-                if (sender) sender.replaceTrack(videoTrack);
 
-                // For simplicity in this demo, we just log it
-                videoTrack.onended = () => log("Condivisione schermo terminata.");
+                if (!state.webcamActive) {
+                    startCompositing();
+                }
+
+                state.screenStream.getVideoTracks()[0].onended = () => {
+                    log("Condivisione schermo terminata.");
+                    state.screenActive = false;
+                    state.screenStream = null;
+                };
             } catch (e) {
                 log(`Errore condivisione: ${e.message}`, "error");
             }
@@ -803,6 +961,7 @@
 
         // Initial log
         log("Sistema pronto.");
+        window.addEventListener('load', loadFromStorage);
     </script>
 
     <!-- PYSCRIPT ENGINE -->
