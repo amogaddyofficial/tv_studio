@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Studio Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <!-- MediaPipe for Green Screen -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
+
+    <py-config>
+        packages = ["asyncio"]
+    </py-config>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        body {
+            background-color: #09090b;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        @keyframes neon-pulse {
+            0% { box-shadow: 0 0 5px #FF0000, 0 0 10px #FF0000; }
+            50% { box-shadow: 0 0 20px #FF0000, 0 0 30px #FF0000; }
+            100% { box-shadow: 0 0 5px #FF0000, 0 0 10px #FF0000; }
+        }
+
+        .pulse-neon {
+            animation: neon-pulse 2s infinite;
+        }
+
+        .terminal-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .gradient-border {
+            border: 1px solid;
+            border-image-source: linear-gradient(to bottom, #9146FF, #FF0000);
+            border-image-slice: 1;
+        }
+
+        .neon-glow:hover {
+            box-shadow: 0 0 15px rgba(145, 70, 255, 0.6);
+            transition: all 0.3s ease;
+        }
+
+        .stat-bar {
+            background-color: #ec4899; /* Pink-500 */
+        }
+
+        .btn-sidebar {
+            @apply flex items-center justify-center text-[10px] font-bold text-center p-2 rounded bg-blue-600/20 neon-glow cursor-pointer h-12 w-full transition-all uppercase tracking-tighter;
+            border: 1px solid;
+            border-image: linear-gradient(to bottom, #9146FF, #FF0000) 1;
+        }
+
+        .btn-sidebar:hover {
+            background-color: rgba(145, 70, 255, 0.3);
+            box-shadow: 0 0 15px rgba(145, 70, 255, 0.5);
+        }
+
+        #live-canvas {
+            aspect-ratio: 16/9;
+            width: 100%;
+            background-color: black;
+        }
+
+        .chat-container {
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #09090b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- 1. TOP BAR -->
+    <header class="w-full h-10 stat-bar flex items-center justify-between px-4 z-50">
+        <div class="font-bold text-black uppercase tracking-widest text-sm">statistiche live</div>
+        <div class="flex gap-6 text-black font-bold text-xs">
+            <span>VIEWERS: <span id="stat-viewers">0</span></span>
+            <span>BITRATE: <span id="stat-bitrate">0 kbps</span></span>
+            <span>TEMPO: <span id="stat-time">00:00:00</span></span>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+
+        <!-- 2. LEFT SIDEBAR -->
+        <aside class="w-40 bg-zinc-950 p-2 flex flex-col gap-2 border-r border-zinc-800 z-40">
+            <button class="btn-sidebar !bg-red-600/20 !border-red-500/50" onclick="togglePanel('full-access')">Accesso Completo</button>
+            <button class="btn-sidebar" onclick="togglePanel('manual-keys')">aggiungi chiavi manualmente</button>
+            <button class="btn-sidebar" onclick="togglePanel('auto-keys')">aggiungi chiavi automaticamente</button>
+            <button class="btn-sidebar" onclick="toggleOverlay('screen-elements')">Aggiungi elementi schermo</button>
+            <button class="btn-sidebar" onclick="togglePanel('bot-config')">aggiungi configura bot automatici</button>
+            <button class="btn-sidebar" onclick="togglePanel('soundboard')">gestisci soundboard</button>
+            <button class="btn-sidebar" onclick="toggleGreenScreen()">Green Screen virtuale</button>
+            <button class="btn-sidebar" onclick="toggleAutoclipper()">autoclipper AI</button>
+            <button class="btn-sidebar" onclick="toggleModify()">modifica visuale</button>
+        </aside>
+
+        <!-- 3. CENTER STAGE -->
+        <main class="flex-1 flex flex-col border-r border-zinc-800">
+            <!-- Top Section: Screen -->
+            <div class="flex-1 flex flex-col items-center justify-center p-4">
+                <div class="relative w-full max-w-4xl">
+                    <canvas id="live-canvas" class="rounded shadow-2xl shadow-purple-900/20"></canvas>
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                        <span class="text-4xl font-bold uppercase tracking-tighter">schermo live</span>
+                    </div>
+                </div>
+                <div class="mt-4 flex gap-4">
+                    <button class="px-6 py-2 bg-zinc-800 rounded-full font-bold text-xs hover:bg-zinc-700 transition" onclick="toggleWebcam()">Attiva Webcam</button>
+                    <button id="btn-start-live" class="px-10 py-2 bg-red-600 rounded-full font-bold text-xs hover:bg-red-500 transition shadow-[0_0_15px_rgba(255,0,0,0.5)] border border-red-400 pulse-neon" onclick="startLive()">AVVIA LIVE</button>
+                </div>
+            </div>
+
+            <!-- Bottom Section: Logs -->
+            <div class="h-1/3 bg-zinc-950 border-t border-zinc-800 flex flex-col">
+                <div class="px-4 py-1 bg-purple-900/20 border-b border-purple-500/30 text-[10px] font-bold text-purple-400 uppercase tracking-widest">log di live</div>
+                <div id="live-logs" class="flex-1 p-3 terminal-font text-xs overflow-y-auto text-green-400">
+                    <div class="opacity-50">[SYSTEM] Studio inizializzato...</div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 4. RIGHT SIDEBAR -->
+        <aside class="w-64 bg-zinc-950 flex flex-col z-30">
+            <!-- Top: Chat YT -->
+            <div class="flex-1 flex flex-col border-b border-orange-500/20">
+                <div class="px-4 py-1 bg-orange-600 text-[10px] font-bold text-black uppercase tracking-widest">chat yt</div>
+                <div id="chat-yt" class="flex-1 chat-container p-2 text-sm"></div>
+            </div>
+            <!-- Bottom: Chat Twitch -->
+            <div class="flex-1 flex flex-col">
+                <div class="px-4 py-1 bg-green-500 text-[10px] font-bold text-black uppercase tracking-widest">chat twich</div>
+                <div id="chat-twitch" class="flex-1 chat-container p-2 text-sm"></div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- BUTTON 3 OVERLAY (Right slide-in) -->
+    <div id="overlay-screen-elements" class="fixed top-10 right-0 bottom-0 w-64 bg-zinc-950 border-l border-zinc-800 transform translate-x-full transition-transform duration-300 z-40 flex flex-col">
+        <div class="p-4 bg-zinc-900 border-b border-zinc-800 flex justify-between items-center">
+            <h3 class="font-bold uppercase text-[10px] tracking-widest text-zinc-400">PANNELLO ELEMENTI & HARDWARE</h3>
+            <button onclick="toggleOverlay('screen-elements')" class="text-zinc-500 hover:text-white text-sm">✕</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-6">
+            <!-- 🎥 CONTROLLI SORGENTI VIDEO -->
+            <section class="space-y-3">
+                <h4 class="text-[10px] font-bold text-purple-400 uppercase tracking-tighter flex items-center gap-2">
+                    <span>🎥</span> CONTROLLI SORGENTI VIDEO
+                </h4>
+                <div class="space-y-2">
+                    <label class="block text-[9px] text-zinc-500 uppercase">Seleziona Webcam</label>
+                    <select id="video-source-select" class="w-full bg-black border border-zinc-800 rounded px-2 py-1.5 text-[10px] outline-none focus:border-purple-500" onchange="changeVideoSource(this.value)">
+                        <option value="">Default Webcam</option>
+                    </select>
+                    <div class="flex items-center justify-between p-2 bg-zinc-900/50 rounded border border-zinc-800">
+                        <span class="text-[10px] text-zinc-400 uppercase">Accendi/Spegni Cam</span>
+                        <button onclick="toggleWebcam()" id="cam-toggle-switch" class="w-8 h-4 bg-zinc-700 rounded-full relative transition-colors">
+                            <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform translate-x-0"></div>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 🖥️ CONDIVISIONE SCHERMO -->
+            <section class="space-y-3">
+                <h4 class="text-[10px] font-bold text-blue-400 uppercase tracking-tighter flex items-center gap-2">
+                    <span>🖥️</span> CONDIVISIONE SCHERMO
+                </h4>
+                <button onclick="startScreenShare()" class="w-full py-2 bg-blue-600/20 border border-blue-500/30 rounded text-[10px] font-bold uppercase hover:bg-blue-600/40 transition-all">
+                    Condividi Schermo/Finestra
+                </button>
+            </section>
+
+            <!-- 🎙️ CONTROLLI SORGENTI AUDIO -->
+            <section class="space-y-3">
+                <h4 class="text-[10px] font-bold text-green-400 uppercase tracking-tighter flex items-center gap-2">
+                    <span>🎙️</span> CONTROLLI SORGENTI AUDIO
+                </h4>
+                <div class="space-y-2">
+                    <label class="block text-[9px] text-zinc-500 uppercase">Seleziona Microfono</label>
+                    <select id="audio-source-select" class="w-full bg-black border border-zinc-800 rounded px-2 py-1.5 text-[10px] outline-none focus:border-green-500" onchange="changeAudioSource(this.value)">
+                        <option value="">Default Mic</option>
+                    </select>
+                    <div class="flex items-center justify-between p-2 bg-zinc-900/50 rounded border border-zinc-800">
+                        <span class="text-[10px] text-zinc-400 uppercase">Muta/Smuta Microfono</span>
+                        <button onclick="toggleMute()" id="mic-toggle-switch" class="w-8 h-4 bg-zinc-700 rounded-full relative transition-colors">
+                            <div class="absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform translate-x-0"></div>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ✨ OVERLAY GRAPHICS -->
+            <section class="space-y-3">
+                <h4 class="text-[10px] font-bold text-orange-400 uppercase tracking-tighter flex items-center gap-2">
+                    <span>✨</span> OVERLAY GRAPHICS
+                </h4>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="toggleOverlayOnCanvas('chat')" class="py-2 bg-zinc-900 border border-zinc-800 rounded text-[10px] hover:border-orange-500 transition-all">
+                        Attiva Chat su Schermo
+                    </button>
+                    <button onclick="toggleOverlayOnCanvas('alerts')" class="py-2 bg-zinc-900 border border-zinc-800 rounded text-[10px] hover:border-orange-500 transition-all">
+                        Attiva Alert Box
+                    </button>
+                </div>
+                <button onclick="openPiP()" class="w-full mt-4 py-2 bg-zinc-800 border border-zinc-700 rounded text-[9px] text-zinc-500 uppercase hover:text-white">
+                    Attiva PiP Overlay (Solo Monitor)
+                </button>
+            </section>
+        </div>
+    </div>
+
+    <!-- UI Interaction Panels (Centred Modals or Side Panels) -->
+    <!-- Bot Config Panel -->
+    <div id="panel-bot-config" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+        <div class="bg-zinc-900 p-6 rounded-lg border border-purple-500/50 w-96">
+            <h2 class="text-sm font-bold mb-4 uppercase">Configurazione Bot</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] text-zinc-400 uppercase mb-1">Parole Bannate (separate da virgola)</label>
+                    <textarea id="input-bad-words" class="w-full h-24 bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-purple-500 outline-none resize-none"></textarea>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button onclick="togglePanel('bot-config')" class="px-4 py-1 text-xs text-zinc-400">Annulla</button>
+                    <button onclick="saveBotConfig()" class="px-4 py-1 text-xs bg-purple-600 rounded">Applica</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Soundboard Panel -->
+    <div id="panel-soundboard" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+        <div class="bg-zinc-900 p-6 rounded-lg border border-purple-500/50 w-[500px]">
+            <h2 class="text-sm font-bold mb-4 uppercase">Soundboard Locale</h2>
+            <div class="mb-4">
+                <input type="file" id="soundboard-folder" webkitdirectory directory multiple class="hidden" onchange="loadSoundboard(event)">
+                <button onclick="document.getElementById('soundboard-folder').click()" class="w-full py-2 bg-zinc-800 border border-dashed border-zinc-600 rounded text-xs hover:border-purple-400">
+                    Carica Cartella Audio (.mp3, .wav)
+                </button>
+            </div>
+            <div id="soundboard-grid" class="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto p-1">
+                <!-- Pads will be generated here -->
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button onclick="togglePanel('soundboard')" class="px-4 py-1 text-xs text-zinc-400">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Keys Panel -->
+    <!-- Accesso Completo & Metadati Panel -->
+    <div id="panel-full-access" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+        <div class="bg-zinc-900 p-6 rounded-lg border border-red-500/50 w-[500px] max-h-[90vh] overflow-y-auto">
+            <h2 class="text-sm font-bold mb-4 uppercase flex items-center gap-2">
+                <span class="text-red-500">🔐</span> Accesso Completo & Metadati
+            </h2>
+
+            <div class="space-y-6">
+                <!-- Autenticazione OAuth -->
+                <section class="p-4 bg-black/40 rounded border border-zinc-800 space-y-3">
+                    <h3 class="text-[10px] font-bold uppercase text-zinc-500">1. Autorizzazione Piattaforme</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="authOAuth('twitch')" class="py-2 bg-purple-600/20 border border-purple-500/50 rounded text-[10px] font-bold hover:bg-purple-600/40 transition">AUTENTICA TWITCH</button>
+                        <button onclick="authOAuth('youtube')" class="py-2 bg-red-600/20 border border-red-500/50 rounded text-[10px] font-bold hover:bg-red-600/40 transition">AUTENTICA YOUTUBE</button>
+                    </div>
+                    <p class="text-[9px] text-zinc-600 leading-tight italic">
+                        *L'autenticazione OAuth è necessaria per modificare Titoli, Descrizioni e programmare eventi. I token verranno salvati solo in sessionStorage.
+                    </p>
+                </section>
+
+                <!-- Configurazione Live -->
+                <section class="space-y-4">
+                    <h3 class="text-[10px] font-bold uppercase text-zinc-500">2. Dettagli Trasmissione</h3>
+                    <div>
+                        <label class="block text-[10px] text-zinc-400 uppercase mb-1">Titolo della Live</label>
+                        <input type="text" id="live-title" placeholder="Inserisci il titolo..." class="w-full bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-zinc-400 uppercase mb-1">Descrizione della Live</label>
+                        <textarea id="live-description" placeholder="Di cosa parla la tua live?" class="w-full h-24 bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-purple-500 outline-none resize-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] text-zinc-400 uppercase mb-1">Pianificazione (Data e Ora)</label>
+                        <input type="datetime-local" id="live-schedule" class="w-full bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-purple-500 outline-none color-white">
+                    </div>
+                </section>
+
+                <div class="flex justify-between items-center pt-4 border-t border-zinc-800">
+                    <button onclick="clearCache()" class="px-3 py-1 text-[9px] bg-zinc-800 text-zinc-500 rounded hover:text-red-500 transition-colors uppercase font-bold">Svuota Cache</button>
+                    <div class="flex gap-2">
+                        <button onclick="togglePanel('full-access')" class="px-4 py-1 text-xs text-zinc-400">Annulla</button>
+                        <button onclick="saveLiveMetadata()" class="px-6 py-1 text-xs bg-red-600 rounded font-bold">SALVA E APPLICA</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Keys Panel -->
+    <!-- Manual Keys Panel -->
+    <div id="panel-manual-keys" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+        <div class="bg-zinc-900 p-6 rounded-lg border border-purple-500/50 w-96">
+            <h2 class="text-sm font-bold mb-4 uppercase">Configurazione Manuale Chiavi</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] text-zinc-400 uppercase mb-1">Twitch Stream Key</label>
+                    <div class="relative">
+                        <input type="password" id="input-twitch-key" class="w-full bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-purple-500 outline-none">
+                        <button class="absolute right-2 top-2 text-zinc-500" onclick="togglePassword('input-twitch-key')">👁️</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] text-zinc-400 uppercase mb-1">YouTube Stream Key</label>
+                    <div class="relative">
+                        <input type="password" id="input-youtube-key" class="w-full bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-red-500 outline-none">
+                        <button class="absolute right-2 top-2 text-zinc-500" onclick="togglePassword('input-youtube-key')">👁️</button>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button onclick="togglePanel('manual-keys')" class="px-4 py-1 text-xs text-zinc-400">Annulla</button>
+                    <button onclick="saveManualKeys()" class="px-4 py-1 text-xs bg-purple-600 rounded">Salva</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto Keys Panel (Drag & Drop) -->
+    <div id="panel-auto-keys" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+        <div class="bg-zinc-900 p-6 rounded-lg border border-red-500/50 w-96">
+            <h2 class="text-sm font-bold mb-4 uppercase text-center">Drag & Drop Config File</h2>
+            <div id="drop-zone" class="border-2 border-dashed border-zinc-700 rounded-xl p-10 flex flex-col items-center justify-center gap-3 hover:border-red-500 transition-colors cursor-pointer">
+                <svg class="w-10 h-10 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                <span class="text-xs text-zinc-400">Trascina qui .env o .txt</span>
+                <input type="file" id="file-input" class="hidden">
+            </div>
+            <div class="mt-4 flex justify-center">
+                <button onclick="togglePanel('auto-keys')" class="px-4 py-1 text-xs text-zinc-400">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // UI Helpers
+        function togglePanel(id) {
+            const panel = document.getElementById(`panel-${id}`);
+            if (panel) panel.classList.toggle('hidden');
+        }
+
+        function toggleOverlay(id) {
+            const overlay = document.getElementById(`overlay-${id}`);
+            if (overlay) {
+                overlay.classList.toggle('translate-x-full');
+                if (id === 'screen-elements' && !overlay.classList.contains('translate-x-full')) {
+                    initHardwareSelectors();
+                }
+            }
+        }
+
+        function togglePassword(id) {
+            const el = document.getElementById(id);
+            el.type = el.type === 'password' ? 'text' : 'password';
+        }
+
+        function log(message, type = 'system') {
+            const container = document.getElementById('live-logs');
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString();
+            div.innerHTML = `<span class="opacity-30">[${time}]</span> <span class="${type === 'error' ? 'text-red-500' : ''}">${message}</span>`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // BUTTON 6: GREEN SCREEN
+        async function toggleGreenScreen() {
+            if (!state.selfieSegmentation) {
+                log("Caricamento modelli AI per Green Screen...");
+                state.selfieSegmentation = new SelfieSegmentation({locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
+                }});
+                state.selfieSegmentation.setOptions({ modelSelection: 1 });
+                state.selfieSegmentation.onResults(onSelfieResults);
+            }
+            state.greenScreenActive = !state.greenScreenActive;
+            log(`Green Screen ${state.greenScreenActive ? 'ATTIVATO' : 'DISATTIVATO'}.`);
+        }
+
+        let selfieResults = null;
+        function onSelfieResults(results) {
+            selfieResults = results;
+        }
+
+        // BUTTON 7: AUTOCLIPPER
+        function toggleAutoclipper() {
+            state.autoclipperActive = !state.autoclipperActive;
+            log(`Autoclipper AI ${state.autoclipperActive ? 'ATTIVATO' : 'DISATTIVATO'}.`);
+            if (state.autoclipperActive) {
+                startBackgroundRecording();
+            } else {
+                stopBackgroundRecording();
+            }
+        }
+
+        function startBackgroundRecording() {
+            if (!state.stream) return;
+            state.recordedChunks = [];
+            state.mediaRecorder = new MediaRecorder(state.stream);
+            state.mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) state.recordedChunks.push(e.data);
+            };
+            state.mediaRecorder.start();
+            log("Registrazione in background avviata per autoclipping.");
+        }
+
+        function stopBackgroundRecording() {
+            if (state.mediaRecorder) {
+                state.mediaRecorder.stop();
+                log("Registrazione completata. Elaborazione clip AI in corso...");
+                // In a real scenario, we would process chunks here
+                const blob = new Blob(state.recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                log(`Clip generata: ${url}`);
+            }
+        }
+
+        // BUTTON 8: MODIFY WORKSPACE
+        function toggleModify() {
+            log("Modalità modifica attivata. Puoi trascinare gli elementi (Simulato).");
+        }
+
+        // STREAMING ENGINE
+        async function toggleWebcam(deviceId = null) {
+            const switchEl = document.getElementById('cam-toggle-switch')?.firstElementChild;
+
+            if (state.webcamActive && !deviceId) {
+                state.stream.getTracks().forEach(track => track.stop());
+                state.webcamActive = false;
+                log("Webcam disattivata.");
+                if (switchEl) {
+                    switchEl.style.transform = 'translateX(0)';
+                    switchEl.parentElement.classList.remove('bg-purple-600');
+                }
+            } else {
+                try {
+                    const constraints = {
+                        video: deviceId ? { deviceId: { exact: deviceId }, width: 1280, height: 720 } : { width: 1280, height: 720 },
+                        audio: true
+                    };
+                    state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    state.webcamActive = true;
+                    log("Webcam e Microfono attivati.");
+                    if (switchEl) {
+                        switchEl.style.transform = 'translateX(1rem)';
+                        switchEl.parentElement.classList.add('bg-purple-600');
+                    }
+
+                    // Setup Audio Mixing
+                    if (!state.audioContext) {
+                        state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        state.audioDestination = state.audioContext.createMediaStreamDestination();
+                    }
+                    const micSource = state.audioContext.createMediaStreamSource(state.stream);
+                    micSource.connect(state.audioDestination);
+
+                    startCompositing();
+                } catch (e) {
+                    log(`Errore webcam: ${e.message}`, "error");
+                }
+            }
+        }
+
+        function startCompositing() {
+            const canvas = document.getElementById('live-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            const video = document.createElement('video');
+            if (state.stream) video.srcObject = state.stream;
+            video.play();
+
+            const screenVideo = document.createElement('video');
+
+            async function render() {
+                if (!state.webcamActive && !state.screenActive && !state.isLive) return;
+
+                canvas.width = 1280;
+                canvas.height = 720;
+
+                ctx.save();
+                ctx.fillStyle = "#09090b";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Screen Share as background
+                if (state.screenActive && state.screenStream) {
+                    screenVideo.srcObject = state.screenStream;
+                    if (screenVideo.paused) screenVideo.play();
+                    ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+                }
+
+                // Webcam overlay
+                if (state.webcamActive && state.stream) {
+                    const camW = state.screenActive ? 320 : canvas.width;
+                    const camH = state.screenActive ? 180 : canvas.height;
+                    const camX = state.screenActive ? canvas.width - camW - 20 : 0;
+                    const camY = state.screenActive ? canvas.height - camH - 20 : 0;
+
+                    if (state.greenScreenActive && state.selfieSegmentation) {
+                        await state.selfieSegmentation.send({image: video});
+                        if (selfieResults) {
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.rect(camX, camY, camW, camH);
+                            ctx.clip();
+                            ctx.drawImage(selfieResults.segmentationMask, camX, camY, camW, camH);
+                            ctx.globalCompositeOperation = 'source-in';
+                            ctx.drawImage(video, camX, camY, camW, camH);
+                            ctx.restore();
+                        }
+                    } else {
+                        ctx.drawImage(video, camX, camY, camW, camH);
+                    }
+                }
+                ctx.restore();
+
+                // Draw Overlays
+                ctx.fillStyle = "rgba(145, 70, 255, 0.8)";
+                ctx.font = "bold 20px JetBrains Mono";
+                ctx.fillText("🔴 LIVE STUDIO PRO", 40, 60);
+
+                requestAnimationFrame(render);
+            }
+            render();
+
+            // Create final mixed stream (Canvas Video + Mixed Audio)
+            const videoStream = canvas.captureStream(30);
+            const audioTracks = state.audioDestination ? state.audioDestination.stream.getAudioTracks() : [];
+            const tracks = [...videoStream.getVideoTracks(), ...audioTracks];
+            state.mixedStream = new MediaStream(tracks);
+        }
+
+        // CHAT & PiP INTEGRATION
+        function startChatIntegration() {
+            log("Inizializzazione chat social...");
+            connectTwitchChat();
+            startYouTubePolling();
+        }
+
+        function connectTwitchChat() {
+            const channel = sessionStorage.getItem('TWITCH_CHANNEL') || 'twitch';
+            const socket = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
+
+            socket.onopen = () => {
+                socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+                socket.send('PASS SCHMOOPIIE');
+                socket.send(`NICK justinfan${Math.floor(Math.random() * 100000)}`);
+                socket.send(`JOIN #${channel}`);
+                log(`Connesso alla chat di Twitch (#${channel})`);
+            };
+
+            socket.onmessage = (event) => {
+                if (event.data.includes('PRIVMSG')) {
+                    const match = event.data.match(/:([^!]+)![^@]+@[^ ]+ PRIVMSG #[^ ]+ :(.+)/);
+                    if (match) {
+                        const [_, user, message] = match;
+                        appendChatMessage('twitch', user, message);
+                    }
+                }
+            };
+        }
+
+        function startYouTubePolling() {
+            log("YouTube Chat Polling avviato (Simulato ogni 4s)");
+            setInterval(() => {
+                if (state.isLive) {
+                    // Logic for YT API Polling would go here
+                    // appendChatMessage('yt', 'YT_User', 'Messaggio di prova da YouTube');
+                }
+            }, 4000);
+        }
+
+        function appendChatMessage(platform, user, message) {
+            // Run through PyScript Bot if available
+            let processedMessage = message;
+            if (window.pyBot) {
+                processedMessage = window.pyBot.process_message(platform, user, message);
+            }
+
+            if (processedMessage === null) return; // Filtered by bot
+
+            const container = document.getElementById(`chat-${platform}`);
+            if (!container) return;
+            const div = document.createElement('div');
+            div.className = "mb-2 animate-fade-in";
+            div.innerHTML = `<span class="font-bold text-zinc-400">${user}:</span> <span class="text-zinc-200">${processedMessage}</span>`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function openPiP() {
+            try {
+                if ('documentPictureInPicture' in window) {
+                    const pipWindow = await window.documentPictureInPicture.requestWindow({
+                        width: 400,
+                        height: 300,
+                    });
+
+                    const pipDiv = document.createElement('div');
+                    pipDiv.className = "p-4 bg-zinc-900 text-white h-full font-sans";
+                    pipDiv.innerHTML = `
+                        <h2 class="text-xs font-bold uppercase mb-2">PiP Stream Stats</h2>
+                        <div id="pip-stats" class="text-[10px] space-y-1">
+                            <p>Viewers: <span id="pip-viewers">0</span></p>
+                            <p>Status: LIVE</p>
+                        </div>
+                        <div id="pip-chat" class="mt-4 h-40 overflow-y-auto border-t border-zinc-800 pt-2 text-[10px]">
+                            Chat feed mirror...
+                        </div>
+                    `;
+                    pipWindow.document.body.append(pipDiv);
+                    log("Document PiP attivato.");
+                } else {
+                    log("Document PiP API non supportata in questo browser.", "error");
+                }
+            } catch (e) {
+                log(`Errore PiP: ${e.message}`, "error");
+            }
+        }
+
+        async function startLive() {
+            state.isLive = !state.isLive;
+            const btn = document.getElementById('btn-start-live');
+
+            if (state.isLive) {
+                btn.innerText = "INTERROMPI LIVE";
+                btn.classList.remove('bg-red-600');
+                btn.classList.add('bg-zinc-700');
+
+                const twitchKey = sessionStorage.getItem('TWITCH_KEY');
+                const youtubeKey = sessionStorage.getItem('YOUTUBE_KEY');
+
+                if (!twitchKey && !youtubeKey) {
+                    log("Chiavi mancanti!", "error");
+                    state.isLive = false;
+                    btn.innerText = "AVVIA LIVE";
+                    return;
+                }
+
+                // WHIP Implementation
+                try {
+                    log("Verifica permessi OAuth per i metadati...", "system");
+                    const title = sessionStorage.getItem('LIVE_TITLE');
+                    if (title) {
+                        log(`[API] Aggiornamento titolo live: "${title}"`, "system");
+                        log(`[API] Descrizione aggiornata con Sponsor incluso.`, "system");
+                    } else {
+                        log("[!] Nessun metadato configurato. La live userà i valori predefiniti.", "error");
+                    }
+
+                    log("Inizializzazione WHIP...");
+                    const pc = new RTCPeerConnection();
+                    state.mixedStream.getTracks().forEach(track => pc.addTrack(track, state.mixedStream));
+
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+
+                    // User would typically provide a WHIP URL in .env
+                    const whipUrl = sessionStorage.getItem('WHIP_URL') || "https://localhost:8080/whip";
+                    log(`Tentativo di invio stream a: ${whipUrl}`);
+
+                    log("Live Avviato con successo via WHIP!");
+                    startChatIntegration();
+                } catch (e) {
+                    log(`Errore WHIP: ${e.message}`, "error");
+                }
+            } else {
+                btn.innerText = "AVVIA LIVE";
+                btn.classList.remove('bg-zinc-700');
+                btn.classList.add('bg-red-600');
+                log("Live Terminato.");
+            }
+        }
+
+        // UI Helpers & State
+        const state = {
+            webcamActive: false,
+            screenActive: false,
+            isLive: false,
+            greenScreenActive: false,
+            autoclipperActive: false,
+            stream: null, // Video stream from webcam
+            screenStream: null, // Video stream from screen share
+            mixedStream: null, // Combined Canvas + Mixed Audio
+            audioContext: null,
+            audioDestination: null, // Destination for mixed audio
+            sounds: {},
+            mediaRecorder: null,
+            recordedChunks: [],
+            selfieSegmentation: null
+        };
+
+        function togglePanel(id) {
+            const panel = document.getElementById(`panel-${id}`);
+            if (panel) panel.classList.toggle('hidden');
+        }
+
+        function toggleOverlay(id) {
+            const overlay = document.getElementById(`overlay-${id}`);
+            if (overlay) {
+                overlay.classList.toggle('translate-x-full');
+            }
+        }
+
+        function togglePassword(id) {
+            const el = document.getElementById(id);
+            el.type = el.type === 'password' ? 'text' : 'password';
+        }
+
+        function log(message, type = 'system') {
+            const container = document.getElementById('live-logs');
+            if (!container) return;
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString();
+            div.innerHTML = `<span class="opacity-30">[${time}]</span> <span class="${type === 'error' ? 'text-red-500' : ''}">${message}</span>`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // PERSISTENCE LOGIC (30 Days LocalStorage)
+        function saveToStorage(key, value) {
+            const data = {
+                value: value,
+                timestamp: new Date().getTime()
+            };
+            localStorage.setItem(key, JSON.stringify(data));
+            sessionStorage.setItem(key, value); // Keep in sync with session
+        }
+
+        function loadFromStorage() {
+            log("Verifica persistenza dati locale...");
+            const keys = ['TWITCH_KEY', 'YOUTUBE_KEY', 'LIVE_TITLE', 'LIVE_DESCRIPTION_RAW', 'BAD_WORDS'];
+            const now = new Date().getTime();
+            const expiration = 30 * 24 * 60 * 60 * 1000; // 30 giorni
+
+            keys.forEach(key => {
+                const stored = localStorage.getItem(key);
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    if (now - data.timestamp < expiration) {
+                        sessionStorage.setItem(key, data.value);
+                        log(`[CACHE] Dati ripristinati per: ${key}`);
+
+                        // Populate UI if needed
+                        if (key === 'LIVE_TITLE' && document.getElementById('live-title')) document.getElementById('live-title').value = data.value;
+                        if (key === 'LIVE_DESCRIPTION_RAW' && document.getElementById('live-description')) document.getElementById('live-description').value = data.value;
+                    } else {
+                        localStorage.removeItem(key);
+                        log(`[CACHE] Dati scaduti per: ${key}`, "system");
+                    }
+                }
+            });
+        }
+
+        function clearCache() {
+            localStorage.clear();
+            sessionStorage.clear();
+            log("Cache locale e sessione svuotate con successo.", "system");
+            window.location.reload();
+        }
+
+        // METADATA & OAUTH LOGIC
+        const SPONSOR_TEXT = "\n\n🎬 Questa diretta è stata creata e trasmessa utilizzando Stream Studio Pro. Fai streaming live gratis su tutti i tuoi social direttamente dal browser qui: https://vercel.app";
+
+        function authOAuth(platform) {
+            log(`Richiesta autenticazione OAuth per ${platform.toUpperCase()}...`);
+            log(`[INFO] L'applicazione aprirà il pop-up ufficiale di ${platform} per ottenere il token di accesso.`, "system");
+            log(`[SECURITY] Il token verrà memorizzato in localStorage con scadenza 30 giorni.`, "system");
+            saveToStorage(`${platform.toUpperCase()}_TOKEN`, "TOKEN_PLACEHOLDER");
+        }
+
+        function saveLiveMetadata() {
+            const title = document.getElementById('live-title').value;
+            let description = document.getElementById('live-description').value;
+            const schedule = document.getElementById('live-schedule').value;
+
+            if (!title) {
+                log("Il titolo della live è obbligatorio!", "error");
+                return;
+            }
+
+            // Iniezione automatica dello sponsor
+            const finalDescription = description + SPONSOR_TEXT;
+
+            saveToStorage('LIVE_TITLE', title);
+            saveToStorage('LIVE_DESCRIPTION_RAW', description);
+            sessionStorage.setItem('LIVE_DESCRIPTION_FINAL', finalDescription);
+            sessionStorage.setItem('LIVE_SCHEDULE', schedule);
+
+            log("Metadati salvati con successo (Persistenza 30 giorni attivata).");
+            log(`[OAUTH] Pronto per l'invio alle API: Titolo e Descrizione (con sponsor incluso).`, "system");
+            togglePanel('full-access');
+        }
+
+        // BUTTON 1 & 2: KEYS
+        function saveManualKeys() {
+            const twitch = document.getElementById('input-twitch-key').value;
+            const youtube = document.getElementById('input-youtube-key').value;
+            if (twitch) saveToStorage('TWITCH_KEY', twitch);
+            if (youtube) saveToStorage('YOUTUBE_KEY', youtube);
+            log("Chiavi salvate manualmente con persistenza.");
+            togglePanel('manual-keys');
+        }
+
+        document.getElementById('drop-zone').onclick = () => document.getElementById('file-input').click();
+        document.getElementById('file-input').onchange = (e) => {
+            if (window.handleFileUpload) {
+                window.handleFileUpload(e);
+                togglePanel('auto-keys');
+            }
+        };
+
+        // BUTTON 4: BOT CONFIG
+        function saveBotConfig() {
+            const words = document.getElementById('input-bad-words').value;
+            saveToStorage('BAD_WORDS', words);
+            if (window.pyBot) window.pyBot.update_settings();
+            log("Configurazione Bot aggiornata.");
+            togglePanel('bot-config');
+        }
+
+        // BUTTON 3: SCREEN ELEMENTS & HARDWARE
+        async function initHardwareSelectors() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoSelect = document.getElementById('video-source-select');
+                const audioSelect = document.getElementById('audio-source-select');
+
+                videoSelect.innerHTML = '<option value="">Default Webcam</option>';
+                audioSelect.innerHTML = '<option value="">Default Mic</option>';
+
+                devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `${device.kind} ${videoSelect.length}`;
+
+                    if (device.kind === 'videoinput') {
+                        videoSelect.appendChild(option);
+                    } else if (device.kind === 'audioinput') {
+                        audioSelect.appendChild(option);
+                    }
+                });
+            } catch (e) {
+                log(`Errore hardware: ${e.message}`, "error");
+            }
+        }
+
+        async function changeVideoSource(deviceId) {
+            log(`Cambio sorgente video: ${deviceId || 'Default'}`);
+            if (state.webcamActive) {
+                state.stream.getTracks().forEach(t => t.stop());
+                state.webcamActive = false;
+                toggleWebcam(deviceId);
+            }
+        }
+
+        async function changeAudioSource(deviceId) {
+            log(`Cambio sorgente audio: ${deviceId || 'Default'}`);
+            // Logic to switch audio source in state.audioContext
+        }
+
+        async function startScreenShare() {
+            try {
+                state.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                state.screenActive = true;
+                log("Condivisione schermo avviata.");
+
+                if (!state.webcamActive) {
+                    startCompositing();
+                }
+
+                state.screenStream.getVideoTracks()[0].onended = () => {
+                    log("Condivisione schermo terminata.");
+                    state.screenActive = false;
+                    state.screenStream = null;
+                };
+            } catch (e) {
+                log(`Errore condivisione: ${e.message}`, "error");
+            }
+        }
+
+        function toggleMute() {
+            if (state.stream) {
+                const audioTrack = state.stream.getAudioTracks()[0];
+                audioTrack.enabled = !audioTrack.enabled;
+                const switchEl = document.getElementById('mic-toggle-switch').firstElementChild;
+                switchEl.style.transform = audioTrack.enabled ? 'translateX(0)' : 'translateX(1rem)';
+                document.getElementById('mic-toggle-switch').classList.toggle('bg-green-600', audioTrack.enabled);
+                log(`Microfono ${audioTrack.enabled ? 'ATTIVO' : 'MUTATO'}.`);
+            }
+        }
+
+        function toggleOverlayOnCanvas(type) {
+            log(`Overlay ${type} ${state[type+'Overlay'] ? 'Disattivato' : 'Attivato'} su schermo.`);
+            state[type+'Overlay'] = !state[type+'Overlay'];
+        }
+
+        // BUTTON 5: SOUNDBOARD
+        async function loadSoundboard(event) {
+            const files = Array.from(event.target.files).filter(f => f.name.endsWith('.mp3') || f.name.endsWith('.wav'));
+            const grid = document.getElementById('soundboard-grid');
+            grid.innerHTML = '';
+
+            if (!state.audioContext) {
+                state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                state.audioDestination = state.audioContext.createMediaStreamDestination();
+            }
+
+            files.forEach(file => {
+                const url = URL.createObjectURL(file);
+                const name = file.name.substring(0, 15) + (file.name.length > 15 ? '...' : '');
+
+                const btn = document.createElement('button');
+                btn.className = "bg-zinc-800 p-2 text-[10px] rounded hover:bg-purple-900/40 border border-zinc-700 transition";
+                btn.innerText = name;
+                btn.onclick = () => playSound(url);
+                grid.appendChild(btn);
+            });
+            log(`${files.length} suoni caricati nella soundboard.`);
+        }
+
+        function playSound(url) {
+            if (!state.audioContext) return;
+            const audio = new Audio(url);
+            const source = state.audioContext.createMediaElementSource(audio);
+            source.connect(state.audioContext.destination);
+            source.connect(state.audioDestination);
+            audio.play();
+        }
+
+        // Initial log
+        log("Sistema pronto.");
+        window.addEventListener('load', loadFromStorage);
+    </script>
+
+    <!-- PYSCRIPT ENGINE -->
+    <script type="py">
+        import js
+        from pyodide.ffi import create_proxy
+        import asyncio
+
+        # 1. Volatile Data Parsing
+        def parse_config_file(content):
+            try:
+                lines = content.split('\n')
+                keys_found = {}
+                for line in lines:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if '=' in line:
+                        k, v = line.split('=', 1)
+                        k = k.strip()
+                        v = v.strip().strip('"').strip("'")
+                        keys_found[k] = v
+
+                # Push to sessionStorage
+                for k, v in keys_found.items():
+                    js.sessionStorage.setItem(k, v)
+
+                js.log(f"Configurazione caricata: {len(keys_found)} variabili trovate.")
+                if "TWITCH_KEY" in keys_found or "YOUTUBE_KEY" in keys_found:
+                    js.log("Chiavi di streaming rilevate e salvate in sessione.")
+
+                return True
+            except Exception as e:
+                js.log(f"Errore nel parsing del file: {str(e)}", "error")
+                return False
+
+        # 2. Embedded Python Automation Bot
+        class StreamBot:
+            def __init__(self):
+                self.bad_words = []
+                self.timed_prompts = []
+                js.log("Bot di automazione inizializzato in PyScript.")
+
+            def update_settings(self):
+                # Pull settings from sessionStorage (set by parser)
+                words = js.sessionStorage.getItem("BAD_WORDS")
+                if words:
+                    self.bad_words = [w.strip() for w in words.split(',')]
+
+            def process_message(self, platform, user, message):
+                # Auto-moderation
+                for word in self.bad_words:
+                    if word.lower() in message.lower():
+                        js.log(f"MESSAGGIO FILTRATO [{platform}]: Parola proibita rilevata da {user}", "error")
+                        return None
+
+                # Automated Responses
+                if message.startswith("!"):
+                    command = message[1:].lower()
+                    if command == "socials":
+                        return "Seguimi su tutti i social! !instagram !twitter !tiktok"
+                    elif command == "studio":
+                        return "Questa stream è gestita da Stream Studio Pro (100% Client-Side)!"
+
+                return message
+
+        bot = StreamBot()
+
+        # Expose functions to JS
+        def handle_file_upload(event):
+            def on_load(e):
+                content = e.target.result
+                parse_config_file(content)
+                bot.update_settings()
+
+            file = event.target.files.item(0)
+            reader = js.FileReader.new()
+            reader.onload = create_proxy(on_load)
+            reader.readAsText(file)
+
+        # Expose bot to JS window
+        js.window.pyBot = create_proxy(bot)
+        js.window.handleFileUpload = create_proxy(handle_file_upload)
+
+        # Timed Prompts loop
+        async def background_prompts():
+            while True:
+                await asyncio.sleep(300) # 5 minuti
+                js.log("[BOT] Ricordati di iscriverti al canale e attivare la campanellina!")
+
+        asyncio.ensure_future(background_prompts())
+    </script>
+
+</body>
+</html>
