@@ -1,7 +1,19 @@
-127.0.0.1 - - [14/Jun/2026 09:39:07] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [14/Jun/2026 09:39:46] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [14/Jun/2026 09:42:13] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [14/Jun/2026 09:45:49] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [15/Jun/2026 12:25:48] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [15/Jun/2026 12:31:20] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [15/Jun/2026 12:34:23] "GET /index.html HTTP/1.1" 200 -
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/http/server.py", line 1329, in <module>
+    test(
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/http/server.py", line 1276, in test
+    with ServerClass(addr, HandlerClass) as httpd:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/socketserver.py", line 457, in __init__
+    self.server_bind()
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/http/server.py", line 1323, in server_bind
+    return super().server_bind()
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/http/server.py", line 140, in server_bind
+    socketserver.TCPServer.server_bind(self)
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 98] Address already in use
+127.0.0.1 - - [16/Jun/2026 07:57:09] "GET /index.html HTTP/1.1" 200 -

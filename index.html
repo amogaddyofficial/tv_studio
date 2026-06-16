@@ -127,8 +127,10 @@
                         <span class="text-4xl font-bold uppercase tracking-tighter">schermo live</span>
                     </div>
                 </div>
-                <div class="mt-4 flex gap-4">
-                    <button class="px-6 py-2 bg-zinc-800 rounded-full font-bold text-xs hover:bg-zinc-700 transition" onclick="toggleWebcam()">Attiva Webcam</button>
+                <div class="mt-4 flex flex-wrap justify-center gap-3">
+                    <button id="quick-webcam" class="px-4 py-2 bg-zinc-800 rounded-full font-bold text-[10px] hover:bg-zinc-700 transition border border-zinc-700" onclick="toggleWebcam()">Attiva Webcam</button>
+                    <button id="quick-screen" class="px-4 py-2 bg-zinc-800 rounded-full font-bold text-[10px] hover:bg-zinc-700 transition border border-zinc-700" onclick="startScreenShare()">Condividi Schermo</button>
+                    <button id="quick-mic" class="px-4 py-2 bg-zinc-800 rounded-full font-bold text-[10px] hover:bg-zinc-700 transition border border-zinc-700" onclick="toggleMute()">Attiva Microfono</button>
                     <button id="btn-start-live" class="px-10 py-2 bg-red-600 rounded-full font-bold text-xs hover:bg-red-500 transition shadow-[0_0_15px_rgba(255,0,0,0.5)] border border-red-400 pulse-neon" onclick="startLive()">AVVIA LIVE</button>
                 </div>
             </div>
@@ -348,6 +350,27 @@
         </div>
     </div>
 
+    <!-- Timer Config Panel -->
+    <div id="panel-timer-config" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
+        <div class="bg-zinc-900 p-6 rounded-lg border border-orange-500/50 w-96">
+            <h2 class="text-sm font-bold mb-4 uppercase text-orange-500">Configurazione Timer "Starting Soon"</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] text-zinc-400 uppercase mb-1">Immagine di Sfondo</label>
+                    <input type="file" id="timer-bg-input" accept="image/*" class="w-full text-xs text-zinc-500 file:mr-4 file:py-1 file:px-4 file:rounded file:border-0 file:text-[10px] file:font-bold file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700">
+                </div>
+                <div>
+                    <label class="block text-[10px] text-zinc-400 uppercase mb-1">Durata (Minuti)</label>
+                    <input type="number" id="timer-duration" value="5" min="1" class="w-full bg-black border border-zinc-700 rounded px-3 py-2 text-xs focus:border-orange-500 outline-none">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button onclick="togglePanel('timer-config')" class="px-4 py-1 text-xs text-zinc-400">Chiudi</button>
+                    <button onclick="startCountdownTimer()" class="px-4 py-1 text-xs bg-orange-600 rounded font-bold">AVVIA COUNTDOWN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Auto Keys Panel (Drag & Drop) -->
     <div id="panel-auto-keys" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/80">
         <div class="bg-zinc-900 p-6 rounded-lg border border-red-500/50 w-96">
@@ -425,9 +448,13 @@
         }
 
         function startBackgroundRecording() {
-            if (!state.stream) return;
+            ensureCompositing();
+            if (!state.mixedStream) {
+                log("Nessun flusso da registrare!", "error");
+                return;
+            }
             state.recordedChunks = [];
-            state.mediaRecorder = new MediaRecorder(state.stream);
+            state.mediaRecorder = new MediaRecorder(state.mixedStream);
             state.mediaRecorder.ondataavailable = (e) => {
                 if (e.data.size > 0) state.recordedChunks.push(e.data);
             };
@@ -454,57 +481,141 @@
         // STREAMING ENGINE
         async function toggleWebcam(deviceId = null) {
             const switchEl = document.getElementById('cam-toggle-switch')?.firstElementChild;
+            const quickBtn = document.getElementById('quick-webcam');
 
             if (state.webcamActive && !deviceId) {
-                state.stream.getTracks().forEach(track => track.stop());
+                if (state.stream) state.stream.getVideoTracks().forEach(track => track.stop());
                 state.webcamActive = false;
                 log("Webcam disattivata.");
-                if (switchEl) {
-                    switchEl.style.transform = 'translateX(0)';
-                    switchEl.parentElement.classList.remove('bg-purple-600');
-                }
+                updateUIForWebcam(false);
             } else {
                 try {
                     const constraints = {
-                        video: deviceId ? { deviceId: { exact: deviceId }, width: 1280, height: 720 } : { width: 1280, height: 720 },
-                        audio: true
+                        video: deviceId ? { deviceId: { exact: deviceId }, width: 1280, height: 720 } : { width: 1280, height: 720 }
                     };
-                    state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    const vStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+                    if (!state.stream) {
+                        state.stream = vStream;
+                    } else {
+                        const oldTrack = state.stream.getVideoTracks()[0];
+                        if (oldTrack) state.stream.removeTrack(oldTrack);
+                        state.stream.addTrack(vStream.getVideoTracks()[0]);
+                    }
+
                     state.webcamActive = true;
-                    log("Webcam e Microfono attivati.");
-                    if (switchEl) {
-                        switchEl.style.transform = 'translateX(1rem)';
-                        switchEl.parentElement.classList.add('bg-purple-600');
-                    }
-
-                    // Setup Audio Mixing
-                    if (!state.audioContext) {
-                        state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                        state.audioDestination = state.audioContext.createMediaStreamDestination();
-                    }
-                    const micSource = state.audioContext.createMediaStreamSource(state.stream);
-                    micSource.connect(state.audioDestination);
-
-                    startCompositing();
+                    log("Webcam attivata.");
+                    updateUIForWebcam(true);
+                    ensureCompositing();
                 } catch (e) {
                     log(`Errore webcam: ${e.message}`, "error");
                 }
             }
         }
 
+        function updateUIForWebcam(active) {
+            const switchEl = document.getElementById('cam-toggle-switch')?.firstElementChild;
+            const quickBtn = document.getElementById('quick-webcam');
+            if (switchEl) {
+                switchEl.style.transform = active ? 'translateX(1rem)' : 'translateX(0)';
+                switchEl.parentElement.classList.toggle('bg-purple-600', active);
+            }
+            if (quickBtn) {
+                quickBtn.innerText = active ? "Spegni Webcam" : "Attiva Webcam";
+                quickBtn.classList.toggle('!bg-purple-600/20', active);
+            }
+        }
+
+        async function toggleMute() {
+            if (state.micActive && state.stream && state.stream.getAudioTracks().length > 0) {
+                state.stream.getAudioTracks().forEach(t => t.stop());
+                state.micActive = false;
+                log("Microfono disattivato.");
+                updateUIForMic(false);
+            } else {
+                try {
+                    const aStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    if (!state.stream) {
+                        state.stream = aStream;
+                    } else {
+                        const oldTrack = state.stream.getAudioTracks()[0];
+                        if (oldTrack) state.stream.removeTrack(oldTrack);
+                        state.stream.addTrack(aStream.getAudioTracks()[0]);
+                    }
+                    state.micActive = true;
+                    log("Microfono attivato.");
+                    updateAudioMixing();
+                    updateUIForMic(true);
+                    ensureCompositing();
+                } catch (e) {
+                    log(`Errore microfono: ${e.message}`, "error");
+                }
+            }
+        }
+
+        function updateUIForMic(active) {
+            const switchEl = document.getElementById('mic-toggle-switch')?.firstElementChild;
+            const quickBtn = document.getElementById('quick-mic');
+            if (switchEl) {
+                switchEl.style.transform = active ? 'translateX(0)' : 'translateX(1rem)';
+                document.getElementById('mic-toggle-switch').classList.toggle('bg-green-600', active);
+            }
+            if (quickBtn) {
+                quickBtn.innerText = active ? "Muta Microfono" : "Attiva Microfono";
+                quickBtn.classList.toggle('!bg-green-600/20', active);
+            }
+        }
+
+        function updateAudioMixing() {
+            if (!state.audioContext) {
+                state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                state.audioDestination = state.audioContext.createMediaStreamDestination();
+            }
+
+            if (state.micActive && state.stream) {
+                const audioTrack = state.stream.getAudioTracks()[0];
+                if (audioTrack) {
+                    if (state.micSource) state.micSource.disconnect();
+                    state.micSource = state.audioContext.createMediaStreamSource(new MediaStream([audioTrack]));
+                    state.micSource.connect(state.audioDestination);
+                }
+            }
+        }
+
+        function ensureCompositing() {
+            if (!state.isCompositing) {
+                startCompositing();
+            }
+        }
+
         function startCompositing() {
+            if (state.isCompositing) return;
+            state.isCompositing = true;
+
             const canvas = document.getElementById('live-canvas');
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
 
-            const video = document.createElement('video');
-            if (state.stream) video.srcObject = state.stream;
-            video.play();
+            if (!state.audioContext) {
+                state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                state.audioDestination = state.audioContext.createMediaStreamDestination();
+            }
 
+            const video = document.createElement('video');
             const screenVideo = document.createElement('video');
 
             async function render() {
-                if (!state.webcamActive && !state.screenActive && !state.isLive) return;
+                if (!state.webcamActive && !state.screenActive && !state.isLive && !state.timerActive) {
+                    state.isCompositing = false;
+                    return;
+                }
+
+                if (state.webcamActive && state.stream && state.stream.getVideoTracks().length > 0) {
+                    if (video.srcObject !== state.stream) {
+                        video.srcObject = state.stream;
+                        video.play().catch(()=>{});
+                    }
+                }
 
                 canvas.width = 1280;
                 canvas.height = 720;
@@ -515,13 +626,15 @@
 
                 // Screen Share as background
                 if (state.screenActive && state.screenStream) {
-                    screenVideo.srcObject = state.screenStream;
-                    if (screenVideo.paused) screenVideo.play();
+                    if (screenVideo.srcObject !== state.screenStream) {
+                        screenVideo.srcObject = state.screenStream;
+                        screenVideo.play().catch(()=>{});
+                    }
                     ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
                 }
 
                 // Webcam overlay
-                if (state.webcamActive && state.stream) {
+                if (state.webcamActive && state.stream && state.stream.getVideoTracks().length > 0) {
                     const camW = state.screenActive ? 320 : canvas.width;
                     const camH = state.screenActive ? 180 : canvas.height;
                     const camX = state.screenActive ? canvas.width - camW - 20 : 0;
@@ -544,6 +657,35 @@
                     }
                 }
                 ctx.restore();
+
+                // Starting Soon Timer Overlay
+                if (state.timerActive) {
+                    ctx.save();
+                    if (state.timerBg && state.timerBg.complete) {
+                        ctx.drawImage(state.timerBg, 0, 0, canvas.width, canvas.height);
+                    } else {
+                        ctx.fillStyle = "#1e1e2e";
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
+
+                    // Darken overlay
+                    ctx.fillStyle = "rgba(0,0,0,0.5)";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Timer Text
+                    ctx.fillStyle = "white";
+                    ctx.textAlign = "center";
+                    ctx.font = "bold 120px Inter";
+                    const mins = Math.floor(state.timerRemaining / 60);
+                    const secs = state.timerRemaining % 60;
+                    const timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                    ctx.fillText(timeStr, canvas.width/2, canvas.height/2 + 20);
+
+                    ctx.font = "bold 30px Inter";
+                    ctx.fillStyle = "rgba(255,255,255,0.7)";
+                    ctx.fillText("INIZIO A BREVE...", canvas.width/2, canvas.height/2 - 80);
+                    ctx.restore();
+                }
 
                 // Draw Overlays
                 ctx.fillStyle = "rgba(145, 70, 255, 0.8)";
@@ -654,6 +796,8 @@
             const btn = document.getElementById('btn-start-live');
 
             if (state.isLive) {
+                ensureCompositing();
+
                 btn.innerText = "INTERROMPI LIVE";
                 btn.classList.remove('bg-red-600');
                 btn.classList.add('bg-zinc-700');
@@ -681,7 +825,11 @@
 
                     log("Inizializzazione WHIP...");
                     const pc = new RTCPeerConnection();
-                    state.mixedStream.getTracks().forEach(track => pc.addTrack(track, state.mixedStream));
+                    if (state.mixedStream) {
+                        state.mixedStream.getTracks().forEach(track => pc.addTrack(track, state.mixedStream));
+                    } else {
+                        throw new Error("Flusso multimediale non pronto.");
+                    }
 
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
@@ -707,14 +855,20 @@
         const state = {
             webcamActive: false,
             screenActive: false,
+            micActive: true,
+            timerActive: false,
+            timerRemaining: 0,
+            timerBg: null,
             isLive: false,
+            isCompositing: false,
             greenScreenActive: false,
             autoclipperActive: false,
-            stream: null, // Video stream from webcam
+            stream: null, // Device stream (webcam and/or mic)
             screenStream: null, // Video stream from screen share
             mixedStream: null, // Combined Canvas + Mixed Audio
             audioContext: null,
             audioDestination: null, // Destination for mixed audio
+            micSource: null,
             sounds: {},
             mediaRecorder: null,
             recordedChunks: [],
@@ -891,10 +1045,27 @@
         }
 
         async function startScreenShare() {
+            const quickBtn = document.getElementById('quick-screen');
+            if (state.screenActive) {
+                state.screenStream.getTracks().forEach(t => t.stop());
+                state.screenActive = false;
+                log("Condivisione schermo terminata.");
+                if (quickBtn) {
+                    quickBtn.innerText = "Condividi Schermo";
+                    quickBtn.classList.remove('!bg-blue-600/20');
+                }
+                return;
+            }
+
             try {
                 state.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
                 state.screenActive = true;
                 log("Condivisione schermo avviata.");
+
+                if (quickBtn) {
+                    quickBtn.innerText = "Interrompi Schermo";
+                    quickBtn.classList.add('!bg-blue-600/20');
+                }
 
                 if (!state.webcamActive) {
                     startCompositing();
@@ -904,22 +1075,16 @@
                     log("Condivisione schermo terminata.");
                     state.screenActive = false;
                     state.screenStream = null;
+                    if (quickBtn) {
+                        quickBtn.innerText = "Condividi Schermo";
+                        quickBtn.classList.remove('!bg-blue-600/20');
+                    }
                 };
             } catch (e) {
                 log(`Errore condivisione: ${e.message}`, "error");
             }
         }
 
-        function toggleMute() {
-            if (state.stream) {
-                const audioTrack = state.stream.getAudioTracks()[0];
-                audioTrack.enabled = !audioTrack.enabled;
-                const switchEl = document.getElementById('mic-toggle-switch').firstElementChild;
-                switchEl.style.transform = audioTrack.enabled ? 'translateX(0)' : 'translateX(1rem)';
-                document.getElementById('mic-toggle-switch').classList.toggle('bg-green-600', audioTrack.enabled);
-                log(`Microfono ${audioTrack.enabled ? 'ATTIVO' : 'MUTATO'}.`);
-            }
-        }
 
         function toggleOverlayOnCanvas(type) {
             log(`Overlay ${type} ${state[type+'Overlay'] ? 'Disattivato' : 'Attivato'} su schermo.`);
@@ -957,6 +1122,35 @@
             source.connect(state.audioContext.destination);
             source.connect(state.audioDestination);
             audio.play();
+        }
+
+        // TIMER LOGIC
+        function startCountdownTimer() {
+            const duration = parseInt(document.getElementById('timer-duration').value);
+            const fileInput = document.getElementById('timer-bg-input');
+
+            if (fileInput.files[0]) {
+                state.timerBg = new Image();
+                state.timerBg.src = URL.createObjectURL(fileInput.files[0]);
+            }
+
+            state.timerRemaining = duration * 60;
+            state.timerActive = true;
+            log(`Timer "Starting Soon" avviato: ${duration} minuti.`);
+            togglePanel('timer-config');
+
+            const interval = setInterval(() => {
+                if (state.timerRemaining > 0) {
+                    state.timerRemaining--;
+                } else {
+                    clearInterval(interval);
+                    state.timerActive = false;
+                    log("[!] IL TIMER È FINITO! SEI PRONTO PER ANDARE IN LIVE?", "error");
+                    alert("⚠️ IL CONTO ALLA ROVESCIA È TERMINATO! VAI IN LIVE ORA!");
+                }
+            }, 1000);
+
+            if (!state.webcamActive && !state.screenActive) startCompositing();
         }
 
         // Initial log
